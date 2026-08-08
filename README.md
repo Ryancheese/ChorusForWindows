@@ -27,6 +27,23 @@ ChorusNet/
     └── Chorus.Speaker/   # 控制台 Speaker（联调）
 ```
 
+## 安装包（GitHub Actions）
+
+仓库已配置自动打 Windows 安装包（自包含，无需单独装 .NET）：
+
+1. 在 GitHub 打开 [Actions → Windows Installer](https://github.com/Ryancheese/ChorusForWindows/actions/workflows/windows-installer.yml)
+2. 点 **Run workflow**（可填版本号，如 `0.1.0`），完成后在该次运行的 **Artifacts** 下载 `ChorusHost-Setup-*.exe`
+3. 或推送标签发正式版：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+安装包会出现在 [Releases](https://github.com/Ryancheese/ChorusForWindows/releases)。
+
+本地也可同样流程：`dotnet publish` 自包含输出后，用 [Inno Setup](https://jrsoftware.org/isinfo.php) 编译 `installer/ChorusHost.iss`。
+
 ## 编译运行
 
 需要 [.NET 8 SDK](https://dotnet.microsoft.com/download)。
@@ -35,6 +52,7 @@ ChorusNet/
 dotnet build src/Chorus.Host/Chorus.Host.csproj
 dotnet run --project src/Chorus.Host/Chorus.Host.csproj
 ```
+
 
 联调 Speaker：
 

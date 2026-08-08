@@ -1,0 +1,97 @@
+name: Windows Installer
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Installer version (e.g. 0.1.0). Leave empty to use tag or 0.1.0."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($v) -and $env:GITHUB_REF -like "refs/tags/v*") {
+            $v = $env:GITHUB_REF_NAME.TrimStart("v")
+          }
+          if ([string]::IsNullOrWhiteSpace($v)) { $v = "0.1.0" }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Installer version: $v"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish self-contained Host
+        shell: pwsh
+        run: |
+          $out = "artifacts/publish"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          dotnet publish src/Chorus.Host/Chorus.Host.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o $out
+          if (-not (Test-Path "$out/Chorus.Host.exe")) {
+            throw "Publish failed: Chorus.Host.exe missing"
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup ISCC.exe not found"
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=${{ steps.ver.outputs.version }}" "installer\ChorusHost.iss"
+          $setup = Get-ChildItem "artifacts\installer\ChorusHost-Setup-*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Installer exe not produced" }
+          Write-Host "Built $($setup.FullName) ($([math]::Round($setup.Length/1MB,1)) MB)"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChorusHost-Setup-${{ steps.ver.outputs.version }}
+          path: artifacts/installer/ChorusHost-Setup-*.exe
+          if-no-files-found: error
+
+      # Tag push (v*): attach installer to the GitHub Release.
+      # Manual runs only upload the workflow artifact (Actions → run → Artifacts).
+      - name: Attach installer to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/installer/ChorusHost-Setup-*.exe
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
