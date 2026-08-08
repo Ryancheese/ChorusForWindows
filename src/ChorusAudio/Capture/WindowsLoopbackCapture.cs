@@ -9,47 +9,58 @@ namespace ChorusAudio.Capture;
 
 /// <summary>
 /// Captures the Windows system mix via WASAPI loopback (shared mode), then
-/// directly downmixes to mono and linearly resamples to 44100 Hz Float32.
-/// Bypasses NAudio's BufferedWaveProvider + resampler chain (which intermittently
-/// returns zero samples) by processing raw WASAPI buffers inline.
+/// downmixes to mono Float32 @ 44100 Hz for Chorus streaming.
+/// Processes raw WASAPI buffers inline (avoids BufferedWaveProvider dropouts).
 /// </summary>
 public sealed class WindowsLoopbackCapture : IAudioCapture
 {
+    private readonly string? _renderDeviceId;
+    private MMDevice? _device;
     private NAudio.Wave.WasapiLoopbackCapture? _capture;
     private volatile bool _running;
 
     public double SampleRate => SyncProtocol.SampleRate; // 44100
     public int Channels => SyncProtocol.Channels;        // 1
 
-    /// <summary>Total raw bytes received from WASAPI since Start.</summary>
     public long TotalBytesCaptured;
-    /// <summary>Peak of raw WASAPI samples (before downmix/resample). 0 = captured silence.</summary>
     public float RawPeak;
-    /// <summary>Peak of processed output samples (after downmix/resample).</summary>
     public float OutPeak;
-    /// <summary>Human-readable device format + name.</summary>
     public string CaptureFormat { get; private set; } = "";
 
     public event Action<ReadOnlyMemory<float>>? SamplesAvailable;
     public event Action<string>? ErrorOccurred;
 
-    // 线性重采样残留：上一次输入的最后一个 mono 样本，用于跨 buffer 插值
     private float _lastInputSample;
-    private double _resamplePos; // 输出采样位置在输入流中的浮点位置
+    private double _resamplePos;
+
+    /// <param name="renderDeviceId">
+    /// Optional render endpoint to loop back (e.g. VB-Cable Input). Null = current default.
+    /// </param>
+    public WindowsLoopbackCapture(string? renderDeviceId = null)
+    {
+        _renderDeviceId = renderDeviceId;
+    }
 
     public void Start()
     {
-        _capture = new NAudio.Wave.WasapiLoopbackCapture();
-        var fmt = _capture.WaveFormat;
-        string deviceName = "";
         try
         {
+            // Keep MMDevice alive for the lifetime of WasapiLoopbackCapture.
             using var enumerator = new MMDeviceEnumerator();
-            using var defaultDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console);
-            deviceName = " · " + defaultDevice.FriendlyName;
+            _device = !string.IsNullOrEmpty(_renderDeviceId)
+                ? enumerator.GetDevice(_renderDeviceId)
+                : enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            _capture = new NAudio.Wave.WasapiLoopbackCapture(_device);
+            CaptureFormat =
+                $"{_capture.WaveFormat.SampleRate / 1000.0:0.#} kHz · {_capture.WaveFormat.Channels} ch · {_capture.WaveFormat.Encoding} · {_device.FriendlyName}";
         }
-        catch { }
-        CaptureFormat = $"{fmt.SampleRate / 1000.0:0.#} kHz · {fmt.Channels} ch · {fmt.Encoding}{deviceName}";
+        catch (Exception ex)
+        {
+            try { _device?.Dispose(); } catch { }
+            _device = null;
+            ErrorOccurred?.Invoke($"无法打开系统音频环回：{ex.Message}");
+            return;
+        }
 
         _lastInputSample = 0;
         _resamplePos = 0;
@@ -60,85 +71,157 @@ public sealed class WindowsLoopbackCapture : IAudioCapture
         _capture.DataAvailable += OnDataAvailable;
         _capture.RecordingStopped += OnRecordingStopped;
         _running = true;
-        _capture.StartRecording();
+        try
+        {
+            _capture.StartRecording();
+        }
+        catch (Exception ex)
+        {
+            _running = false;
+            ErrorOccurred?.Invoke($"系统音频捕获启动失败：{ex.Message}");
+        }
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
-        if (!_running) return;
+        if (!_running || _capture == null || e.BytesRecorded <= 0) return;
         Interlocked.Add(ref TotalBytesCaptured, e.BytesRecorded);
 
-        var fmt = _capture!.WaveFormat;
-        int channels = fmt.Channels;
+        var fmt = _capture.WaveFormat;
+        int channels = Math.Max(1, fmt.Channels);
+        bool isFloat = IsIeeeFloat(fmt);
         int bytesPerSample = fmt.BitsPerSample / 8;
-        // WASAPI loopback 通常是 32-bit float
-        if (bytesPerSample <= 0) bytesPerSample = 4;
+        if (bytesPerSample <= 0) bytesPerSample = isFloat ? 4 : 2;
 
         int frameCount = e.BytesRecorded / (bytesPerSample * channels);
-        if (frameCount == 0) return;
+        if (frameCount <= 0) return;
 
-        // Step 1: 解码 + downmix 到 mono（用 ArrayPool 借还，减少 GC 压力）
         float[] mono = ArrayPool<float>.Shared.Rent(frameCount);
         try
         {
-        float rawPeak = 0;
-        if (fmt.Encoding == WaveFormatEncoding.IeeeFloat && bytesPerSample == 4)
-        {
-            float downmixScale = 0.8f / channels; // 留 20% 余量防 clipping
-            for (int i = 0; i < frameCount; i++)
+            float rawPeak = 0;
+            if (isFloat && bytesPerSample == 4)
             {
-                float sum = 0;
-                int baseIdx = (i * channels) * 4;
-                for (int c = 0; c < channels; c++)
-                    sum += BitConverter.ToSingle(e.Buffer, baseIdx + c * 4);
-                float m = sum * downmixScale;
-                mono[i] = m;
-                float a = Math.Abs(m);
-                if (a > rawPeak) rawPeak = a;
+                float downmixScale = 0.8f / channels;
+                for (int i = 0; i < frameCount; i++)
+                {
+                    float sum = 0;
+                    int baseIdx = i * channels * 4;
+                    for (int c = 0; c < channels; c++)
+                        sum += BitConverter.ToSingle(e.Buffer, baseIdx + c * 4);
+                    float m = sum * downmixScale;
+                    mono[i] = m;
+                    float a = Math.Abs(m);
+                    if (a > rawPeak) rawPeak = a;
+                }
             }
+            else if (bytesPerSample == 2)
+            {
+                float downmixScale = 0.8f / channels / 32768f;
+                for (int i = 0; i < frameCount; i++)
+                {
+                    float sum = 0;
+                    int baseIdx = i * channels * 2;
+                    for (int c = 0; c < channels; c++)
+                        sum += BitConverter.ToInt16(e.Buffer, baseIdx + c * 2);
+                    float m = sum * downmixScale;
+                    mono[i] = m;
+                    float a = Math.Abs(m);
+                    if (a > rawPeak) rawPeak = a;
+                }
+            }
+            else if (bytesPerSample == 3)
+            {
+                // 24-bit PCM packed
+                float downmixScale = 0.8f / channels / 8388608f;
+                for (int i = 0; i < frameCount; i++)
+                {
+                    float sum = 0;
+                    int baseIdx = i * channels * 3;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        int o = baseIdx + c * 3;
+                        int sample = e.Buffer[o] | (e.Buffer[o + 1] << 8) | (e.Buffer[o + 2] << 16);
+                        if ((sample & 0x800000) != 0) sample |= unchecked((int)0xFF000000);
+                        sum += sample;
+                    }
+                    float m = sum * downmixScale;
+                    mono[i] = m;
+                    float a = Math.Abs(m);
+                    if (a > rawPeak) rawPeak = a;
+                }
+            }
+            else
+            {
+                // Unsupported — emit silence for this buffer rather than crashing the session.
+                Array.Clear(mono, 0, frameCount);
+            }
+
+            if (rawPeak > RawPeak) RawPeak = rawPeak;
+
+            double inputRate = fmt.SampleRate;
+            double outputRate = SyncProtocol.SampleRate;
+            if (inputRate <= 0) return;
+            double ratio = inputRate / outputRate;
+
+            // Near 1:1 — copy with light rate correction; otherwise linear resample.
+            if (Math.Abs(inputRate - outputRate) < 0.5)
+            {
+                var exact = new float[frameCount];
+                Array.Copy(mono, exact, frameCount);
+                if (rawPeak > OutPeak) OutPeak = rawPeak;
+                SamplesAvailable?.Invoke(exact);
+                return;
+            }
+
+            int estOutCount = (int)(frameCount / ratio) + 4;
+            float[] output = new float[estOutCount];
+            int outIdx = 0;
+            double endInputPos = frameCount;
+
+            while (_resamplePos < endInputPos - 1e-9)
+            {
+                int idx = (int)Math.Floor(_resamplePos);
+                double frac = _resamplePos - idx;
+                float s0 = idx <= 0 ? (idx == 0 ? mono[0] : _lastInputSample) : mono[Math.Min(idx, frameCount - 1)];
+                float s1 = mono[Math.Min(idx + 1, frameCount - 1)];
+                if (idx < 0) s0 = _lastInputSample;
+                float outSample = (float)(s0 + (s1 - s0) * frac);
+                if (outIdx < output.Length)
+                {
+                    output[outIdx++] = outSample;
+                    float a = Math.Abs(outSample);
+                    if (a > OutPeak) OutPeak = a;
+                }
+                _resamplePos += ratio;
+            }
+
+            _resamplePos -= frameCount;
+            _lastInputSample = mono[frameCount - 1];
+
+            if (outIdx > 0)
+                SamplesAvailable?.Invoke(output.AsMemory(0, outIdx));
         }
-        else
+        catch (Exception ex)
         {
-            rawPeak = 0;
-        }
-
-        if (rawPeak > RawPeak) RawPeak = rawPeak;
-
-        // Step 2: 线性重采样 inputRate -> 44100（预估输出数量，一次分配，不用 List+ToArray）
-        double inputRate = fmt.SampleRate;
-        double outputRate = SyncProtocol.SampleRate;
-        double ratio = inputRate / outputRate;
-
-        int estOutCount = (int)(frameCount / ratio) + 2;
-        float[] output = new float[estOutCount];
-        int outIdx = 0;
-
-        double endInputPos = frameCount;
-        while (_resamplePos < endInputPos - 1)
-        {
-            int idx = (int)Math.Floor(_resamplePos);
-            double frac = _resamplePos - idx;
-            float s0 = idx < 0 ? _lastInputSample : mono[idx];
-            float s1 = mono[idx + 1];
-            float outSample = (float)(s0 + (s1 - s0) * frac);
-            output[outIdx] = outSample;
-            float a = Math.Abs(outSample);
-            if (a > OutPeak) OutPeak = a;
-            _resamplePos += ratio;
-            outIdx++;
-        }
-        _resamplePos -= frameCount;
-        _lastInputSample = mono[frameCount - 1];
-
-        if (outIdx > 0)
-        {
-            SamplesAvailable?.Invoke(output.AsMemory(0, outIdx));
-        }
+            ErrorOccurred?.Invoke($"系统音频处理失败：{ex.Message}");
         }
         finally
         {
             ArrayPool<float>.Shared.Return(mono);
         }
+    }
+
+    // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
+    private static readonly Guid IeeeFloatSubType = new("00000003-0000-0010-8000-00aa00389b71");
+
+    private static bool IsIeeeFloat(WaveFormat fmt)
+    {
+        if (fmt.Encoding == WaveFormatEncoding.IeeeFloat) return true;
+        if (fmt is WaveFormatExtensible ext)
+            return ext.SubFormat == IeeeFloatSubType;
+        // Many WASAPI loopback devices report Extensible + 32-bit float.
+        return fmt.Encoding == WaveFormatEncoding.Extensible && fmt.BitsPerSample == 32;
     }
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)
@@ -152,6 +235,19 @@ public sealed class WindowsLoopbackCapture : IAudioCapture
     {
         _running = false;
         try { _capture?.StopRecording(); } catch { }
+        try
+        {
+            if (_capture != null)
+            {
+                _capture.DataAvailable -= OnDataAvailable;
+                _capture.RecordingStopped -= OnRecordingStopped;
+                _capture.Dispose();
+            }
+        }
+        catch { }
+        _capture = null;
+        try { _device?.Dispose(); } catch { }
+        _device = null;
     }
 
     public void Dispose() => Stop();

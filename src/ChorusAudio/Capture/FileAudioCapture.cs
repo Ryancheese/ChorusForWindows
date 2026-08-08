@@ -60,6 +60,8 @@ public sealed class FileAudioCapture : IAudioCapture
     private void ReadLoop()
     {
         var buf = new float[4096];
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        long samplesEmitted = 0;
         while (_running && _provider != null && _reader != null)
         {
             // Check if file is exhausted
@@ -89,6 +91,13 @@ public sealed class FileAudioCapture : IAudioCapture
             var data = new float[read];
             Array.Copy(buf, data, read);
             try { SamplesAvailable?.Invoke(data); } catch { }
+
+            // Pace near realtime so local buffer / send queue don't race ahead of hostPlayAt.
+            samplesEmitted += read;
+            double idealSec = samplesEmitted / SampleRate;
+            double ahead = idealSec - clock.Elapsed.TotalSeconds;
+            if (ahead > 0.02)
+                Thread.Sleep(TimeSpan.FromSeconds(Math.Min(ahead, 0.2)));
         }
     }
 

@@ -22,6 +22,7 @@ public sealed class DiscoveredPeer
 /// Actively browses the LAN for <c>_chorus._tcp</c> services via mDNS. Sends a PTR
 /// query periodically and parses responses (PTR + SRV + A) into <see cref="Peers"/>.
 /// Stale entries are pruned after <see cref="PeerTimeout"/>.
+/// Compatible with iOS Bonjour / NWListener advertisements.
 /// </summary>
 public sealed class MdnsBrowser : IDisposable
 {
@@ -35,7 +36,15 @@ public sealed class MdnsBrowser : IDisposable
     private Timer? _queryTimer;
     private volatile bool _running;
     private readonly Dictionary<string, DiscoveredPeer> _peers = new();
-    private readonly Dictionary<string, (string InstanceName, string HostName, ushort Port)> _pending = new();
+    /// <summary>Key = instance FQDN (lower), e.g. "chorus-iphone._chorus._tcp.local".</summary>
+    private readonly Dictionary<string, PendingPeer> _pending = new();
+
+    private sealed class PendingPeer
+    {
+        public string InstanceName = "";
+        public string HostName = "";
+        public ushort Port;
+    }
 
     public IReadOnlyDictionary<string, DiscoveredPeer> Peers
     {
@@ -72,13 +81,12 @@ public sealed class MdnsBrowser : IDisposable
     {
         if (!_running || _client == null) return;
 
-        // 清理过期 peer（超过 PeerTimeout 没收到响应的设备移除）
         bool changed = false;
         var cutoff = DateTime.UtcNow - PeerTimeout;
         lock (_lock)
         {
-            var expired = _peers.Where(p => p.Value.LastSeen < cutoff).ToList();
-            foreach (var (key, _) in expired)
+            var expired = _peers.Where(p => p.Value.LastSeen < cutoff).Select(p => p.Key).ToList();
+            foreach (var key in expired)
             {
                 _peers.Remove(key);
                 _pending.Remove(key);
@@ -89,8 +97,29 @@ public sealed class MdnsBrowser : IDisposable
 
         try
         {
-            var packet = DnsCodec.BuildQuery(ServiceType, DnsRecordType.PTR);
-            _client.Send(packet, packet.Length, new IPEndPoint(MulticastAddress, MulticastPort));
+            var endpoint = new IPEndPoint(MulticastAddress, MulticastPort);
+            var ptr = DnsCodec.BuildQuery(ServiceType, DnsRecordType.PTR);
+            _client.Send(ptr, ptr.Length, endpoint);
+
+            // Follow up on incomplete discoveries (common when the first reply is PTR-only).
+            List<(string Name, DnsRecordType Type)> followUps;
+            lock (_lock)
+            {
+                followUps = new List<(string, DnsRecordType)>();
+                foreach (var (key, p) in _pending)
+                {
+                    if (_peers.ContainsKey(key)) continue;
+                    if (p.Port == 0)
+                        followUps.Add((key, DnsRecordType.SRV));
+                    else if (!string.IsNullOrEmpty(p.HostName))
+                        followUps.Add((p.HostName, DnsRecordType.A));
+                }
+            }
+            foreach (var (name, type) in followUps)
+            {
+                var q = DnsCodec.BuildQuery(name, type);
+                _client.Send(q, q.Length, endpoint);
+            }
         }
         catch (Exception ex)
         {
@@ -117,100 +146,156 @@ public sealed class MdnsBrowser : IDisposable
         if (answers.Count == 0 && additionals.Count == 0) return;
 
         var all = answers.Concat(additionals).ToList();
+        var aRecords = new Dictionary<string, IPAddress>(StringComparer.OrdinalIgnoreCase);
         bool changed = false;
 
+        // Pass 1: collect A records (hostname → IPv4).
         foreach (var rec in all)
         {
-            if (rec.Class == 0) continue; // any cache flush ignored
+            if (rec.Type != DnsRecordType.A || rec.Rdata.Length != 4) continue;
+            if ((rec.Class & 0x7FFF) == 0) continue;
+            var host = NormalizeHost(rec.Name);
+            if (host.Length == 0) continue;
+            aRecords[host] = new IPAddress(rec.Rdata);
+        }
+
+        // Pass 2: PTR / SRV → pending keyed by instance FQDN (not service type).
+        foreach (var rec in all)
+        {
+            if ((rec.Class & 0x7FFF) == 0) continue;
             try
             {
                 if (rec.Type == DnsRecordType.PTR)
                 {
-                    // PTR: _chorus._tcp.local → Chorus-DESKTOP-ABC._chorus._tcp.local
-                    if (DnsCodec.TryParsePtr(rec.Rdata, out var instanceFull))
+                    if (!IsServiceType(rec.Name)) continue;
+                    if (!DnsCodec.TryParsePtr(rec.Rdata, data, rec.RdataOffset, out var instanceFull)) continue;
+                    instanceFull = NormalizeHost(instanceFull);
+                    if (instanceFull.Length == 0 || !IsChorusInstance(instanceFull)) continue;
+
+                    string key = instanceFull.ToLowerInvariant();
+                    string inst = InstanceLabel(instanceFull);
+                    lock (_lock)
                     {
-                        string key = rec.Name.ToLowerInvariant();
-                        lock (_lock)
-                        {
-                            if (!_peers.TryGetValue(key, out var existing))
-                            {
-                                // Remember instance name; wait for SRV/A to complete
-                                if (!_pending.TryGetValue(key, out var p)) p = ("", "", 0);
-                                var inst = instanceFull.EndsWith("." + rec.Name, StringComparison.OrdinalIgnoreCase)
-                                    ? instanceFull[..^(rec.Name.Length + 1)] : instanceFull;
-                                _pending[key] = (inst, p.HostName, p.Port);
-                            }
-                        }
+                        if (!_pending.TryGetValue(key, out var p))
+                            _pending[key] = p = new PendingPeer();
+                        if (!string.IsNullOrEmpty(inst)) p.InstanceName = inst;
+                        TouchPeer(key);
                     }
                 }
                 else if (rec.Type == DnsRecordType.SRV)
                 {
-                    // SRV: Chorus-DESKTOP-ABC._chorus._tcp.local → priority weight port target
-                    if (DnsCodec.TryParseSrv(rec.Rdata, data, 0, out var port, out var target))
+                    var instanceFull = NormalizeHost(rec.Name);
+                    if (!IsChorusInstance(instanceFull)) continue;
+                    if (!DnsCodec.TryParseSrv(rec.Rdata, data, rec.RdataOffset, out var port, out var target)) continue;
+
+                    string key = instanceFull.ToLowerInvariant();
+                    string inst = InstanceLabel(instanceFull);
+                    string host = NormalizeHost(target);
+                    lock (_lock)
                     {
-                        string key = rec.Name.ToLowerInvariant();
-                        lock (_lock)
+                        if (!_pending.TryGetValue(key, out var p))
+                            _pending[key] = p = new PendingPeer();
+                        if (!string.IsNullOrEmpty(inst)) p.InstanceName = inst;
+                        if (!string.IsNullOrEmpty(host)) p.HostName = host;
+                        if (port != 0) p.Port = port;
+
+                        if (_peers.TryGetValue(key, out var existing))
                         {
-                            if (!_peers.TryGetValue(key, out var existing))
+                            var ip = existing.IPAddress;
+                            if (!string.IsNullOrEmpty(host) && aRecords.TryGetValue(host, out var fromPacket))
+                                ip = fromPacket;
+                            var updated = new DiscoveredPeer
                             {
-                                if (!_pending.TryGetValue(key, out var p)) p = ("", "", 0);
-                                var inst = rec.Name.EndsWith("." + ServiceType, StringComparison.OrdinalIgnoreCase)
-                                    ? rec.Name[..^(ServiceType.Length + 1)] : rec.Name;
-                                _pending[key] = (inst, target, port);
-                            }
-                        }
-                    }
-                }
-                else if (rec.Type == DnsRecordType.A)
-                {
-                    if (rec.Rdata.Length == 4)
-                    {
-                        var ip = new IPAddress(rec.Rdata);
-                        // Match to pending by hostname
-                        lock (_lock)
-                        {
-                            string? matchedKey = null;
-                            foreach (var (k, p) in _pending)
-                            {
-                                if (p.HostName.Equals(rec.Name, StringComparison.OrdinalIgnoreCase) ||
-                                    p.HostName.Equals(rec.Name.TrimEnd('.'), StringComparison.OrdinalIgnoreCase))
-                                {
-                                    matchedKey = k;
-                                    if (!_peers.TryGetValue(k, out var ex))
-                                    {
-                                        _peers[k] = new DiscoveredPeer
-                                        {
-                                            InstanceName = p.InstanceName,
-                                            HostName = p.HostName,
-                                            IPAddress = ip,
-                                            Port = p.Port,
-                                            LastSeen = DateTime.UtcNow
-                                        };
-                                    }
-                                    else
-                                    {
-                                        _peers[k] = new DiscoveredPeer
-                                        {
-                                            InstanceName = ex.InstanceName,
-                                            HostName = ex.HostName,
-                                            IPAddress = ip,
-                                            Port = p.Port != 0 ? p.Port : ex.Port,
-                                            LastSeen = DateTime.UtcNow
-                                        };
-                                    }
-                                    changed = true;
-                                    break;
-                                }
-                            }
-                            if (matchedKey != null) _pending.Remove(matchedKey);
+                                InstanceName = string.IsNullOrEmpty(p.InstanceName) ? existing.InstanceName : p.InstanceName,
+                                HostName = string.IsNullOrEmpty(host) ? existing.HostName : host,
+                                IPAddress = ip,
+                                Port = port != 0 ? port : existing.Port,
+                                LastSeen = DateTime.UtcNow,
+                            };
+                            if (!SameEndpoint(existing, updated)) changed = true;
+                            _peers[key] = updated;
                         }
                     }
                 }
             }
-            catch { /* malformed packet — skip record */ }
+            catch { /* malformed record — skip */ }
+        }
+
+        // Pass 3: promote pending → peers when we have HostName + Port + A.
+        lock (_lock)
+        {
+            foreach (var (key, p) in _pending.ToList())
+            {
+                if (p.Port == 0 || string.IsNullOrEmpty(p.HostName)) continue;
+                if (!aRecords.TryGetValue(p.HostName, out var ip)) continue;
+
+                var inst = string.IsNullOrEmpty(p.InstanceName) ? key : p.InstanceName;
+                var next = new DiscoveredPeer
+                {
+                    InstanceName = inst,
+                    HostName = p.HostName,
+                    IPAddress = ip,
+                    Port = p.Port,
+                    LastSeen = DateTime.UtcNow,
+                };
+                if (!_peers.TryGetValue(key, out var existing) || !SameEndpoint(existing, next))
+                    changed = true;
+                _peers[key] = next;
+            }
+
+            // Refresh LastSeen / IP for known peers when their A appears again.
+            foreach (var (key, peer) in _peers.ToList())
+            {
+                if (!aRecords.TryGetValue(peer.HostName, out var ip)) continue;
+                var next = new DiscoveredPeer
+                {
+                    InstanceName = peer.InstanceName,
+                    HostName = peer.HostName,
+                    IPAddress = ip,
+                    Port = peer.Port,
+                    LastSeen = DateTime.UtcNow,
+                };
+                if (!peer.IPAddress.Equals(ip)) changed = true;
+                _peers[key] = next;
+            }
         }
 
         if (changed) PeersChanged?.Invoke();
+    }
+
+    private void TouchPeer(string key)
+    {
+        if (!_peers.TryGetValue(key, out var existing)) return;
+        _peers[key] = new DiscoveredPeer
+        {
+            InstanceName = existing.InstanceName,
+            HostName = existing.HostName,
+            IPAddress = existing.IPAddress,
+            Port = existing.Port,
+            LastSeen = DateTime.UtcNow,
+        };
+    }
+
+    private static bool SameEndpoint(DiscoveredPeer a, DiscoveredPeer b) =>
+        a.InstanceName == b.InstanceName
+        && a.HostName.Equals(b.HostName, StringComparison.OrdinalIgnoreCase)
+        && a.IPAddress.Equals(b.IPAddress)
+        && a.Port == b.Port;
+
+    private static bool IsServiceType(string name) =>
+        NormalizeHost(name).Equals(ServiceType, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsChorusInstance(string name) =>
+        NormalizeHost(name).EndsWith("." + ServiceType, StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeHost(string name) => (name ?? "").Trim().TrimEnd('.');
+
+    private static string InstanceLabel(string instanceFull)
+    {
+        var n = NormalizeHost(instanceFull);
+        if (n.EndsWith("." + ServiceType, StringComparison.OrdinalIgnoreCase))
+            return n[..^(ServiceType.Length + 1)];
+        return n;
     }
 
     public void Dispose()

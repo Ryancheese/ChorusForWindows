@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Avalonia.Threading;
+using Chorus.Host.Localization;
 using Chorus.Host.Session;
 using ChorusCore.Audio;
 using ChorusCore.Network.Mdns;
@@ -16,14 +17,13 @@ namespace Chorus.Host.ViewModels;
 public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly HostSessionController _controller;
-    private readonly DispatcherTimer _diagTimer;
-    private string _status = "未启动";
-    private string _phaseDisplay = "未开始";
+    private readonly DispatcherTimer _refreshTimer;
+    private readonly Action _onLanguageChanged;
+    private string _status = "";
+    private string _phaseDisplay = "";
     private string _localIpDisplay = "";
-    private string _rttDisplay = "";
     private string? _error;
     private bool _hasLocalIp;
-    private bool _hasRtt;
     private bool _hasError;
     private bool _hasSpeakers;
     private int _speakerCount;
@@ -32,37 +32,39 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
     private bool _playLocal = true;
     private bool _muteLocal;
     private bool _streamingSystemAudio;
-    private string _currentSource = "未播放";
-    private string _captureInfo = "";
+    private string _currentSource = "";
     private string _manualIp = "";
     private string _manualPort = SyncBonjour.ControlPort.ToString();
-    private bool _showDiagnostics;
     private bool _isDark = true;
     private bool _helpVisible;
     private string _browserStatus = "";
+    private string _languageLabel = "";
+    private double _localSyncOffsetMs;
 
     public ObservableCollection<DeviceInfo> Speakers { get; } = new();
-    public ObservableCollection<DiscoveredPeer> DiscoveredPeers { get; } = new();
+    public ObservableCollection<PeerRowViewModel> DiscoveredPeers { get; } = new();
     public Playlist Playlist => _controller.Playlist;
 
     public string Status { get => _status; set => Set(ref _status, value); }
     public string PhaseDisplay { get => _phaseDisplay; set => Set(ref _phaseDisplay, value); }
+    public bool HasRTT => _controller.BestRTT.HasValue;
+    public string RTTDisplay => _controller.BestRTT is { } rtt
+        ? $"{(int)Math.Round(rtt * 1000)} ms"
+        : "";
     public string LocalIPDisplay { get => _localIpDisplay; set => Set(ref _localIpDisplay, value); }
-    public string RTTDisplay { get => _rttDisplay; set => Set(ref _rttDisplay, value); }
     public string? Error
     {
         get => _error;
         set { if (Set(ref _error, value)) HasError = !string.IsNullOrEmpty(value); }
     }
     public bool HasLocalIP { get => _hasLocalIp; set => Set(ref _hasLocalIp, value); }
-    public bool HasRTT { get => _hasRtt; set => Set(ref _hasRtt, value); }
     public bool HasError { get => _hasError; set => Set(ref _hasError, value); }
     public bool HasSpeakers { get => _hasSpeakers; set => Set(ref _hasSpeakers, value); }
     public int SpeakerCount { get => _speakerCount; set => Set(ref _speakerCount, value); }
     public bool IsPlaying { get => _isPlaying; set => Set(ref _isPlaying, value); }
     public bool IsPaused { get => _isPaused; set => Set(ref _isPaused, value); }
     public bool CanPauseResume => IsPlaying;
-    public string PauseResumeLabel => IsPaused ? "继续" : "暂停";
+    public string PauseResumeLabel => IsPaused ? L10n.T("action.resume") : L10n.T("action.pause");
     public bool PlayLocal
     {
         get => _playLocal;
@@ -94,17 +96,52 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SystemAudioButtonLabel)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanStartSystemAudio)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AutoAdvanceEnabled)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanPlayLocal)));
             }
         }
     }
-    public string SystemAudioButtonLabel => IsStreamingSystemAudio ? "停止统一转播" : "统一转播系统声音";
+    public string SystemAudioButtonLabel => IsStreamingSystemAudio
+        ? L10n.T("action.stream.system.stop")
+        : L10n.T("action.stream.system.start");
     public bool CanStartSystemAudio => HasSpeakers || IsStreamingSystemAudio;
     public bool AutoAdvanceEnabled => !IsStreamingSystemAudio;
+    /// <summary>Local mirror is incompatible with WASAPI loopback (feedback).</summary>
+    public bool CanPlayLocal => !IsStreamingSystemAudio;
     public string CurrentSource { get => _currentSource; set => Set(ref _currentSource, value); }
-    public string CaptureInfo { get => _captureInfo; set => Set(ref _captureInfo, value); }
-    public string ManualIP { get => _manualIp; set => Set(ref _manualIp, value); }
-    public string ManualPort { get => _manualPort; set => Set(ref _manualPort, value); }
+    public string ManualIP
+    {
+        get => _manualIp;
+        set
+        {
+            if (Set(ref _manualIp, value))
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ManualConnectLabel)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanManualConnect)));
+            }
+        }
+    }
+    public string ManualPort
+    {
+        get => _manualPort;
+        set
+        {
+            if (Set(ref _manualPort, value))
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ManualConnectLabel)));
+        }
+    }
     public bool HasDiscoveredPeers => DiscoveredPeers.Count > 0;
+    public string ManualConnectLabel => IsManualEndpointConnected
+        ? L10n.T("action.disconnect")
+        : L10n.T("action.connect");
+    public bool IsManualEndpointConnected
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(ManualIP)) return false;
+            if (!ushort.TryParse(ManualPort.Trim(), out var port)) port = SyncBonjour.ControlPort;
+            return _controller.IsConnectedTo($"{ManualIP.Trim()}:{port}");
+        }
+    }
     public bool HasCurrentItem => Playlist.Current != null;
     public bool HasItems => Playlist.Items.Count > 0;
     public bool CanPlay => HasCurrentItem && (HasSpeakers || PlayLocal) && !IsStreamingSystemAudio;
@@ -123,57 +160,141 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
         get => _helpVisible;
         set => Set(ref _helpVisible, value);
     }
-    public bool ShowDiagnostics
+
+    public string LanguageLabel { get => _languageLabel; set => Set(ref _languageLabel, value); }
+    public string AppearanceMode { get; private set; } = "dark"; // system | light | dark
+
+    /// <summary>Local trim vs phone in milliseconds (−120…+120). Positive delays the PC.</summary>
+    public double LocalSyncOffsetMs
     {
-        get => _showDiagnostics;
+        get => _localSyncOffsetMs;
         set
         {
-            if (Set(ref _showDiagnostics, value))
+            var v = Math.Clamp(value, -120, 120);
+            if (!Set(ref _localSyncOffsetMs, v)) return;
+            _controller.LocalSyncOffsetSeconds = v / 1000.0;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LocalSyncOffsetLabel)));
+            try
             {
-                if (value) _diagTimer.Start();
-                else _diagTimer.Stop();
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ChorusHost");
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "local-sync-offset.txt"), v.ToString("0"));
             }
+            catch { }
         }
     }
 
-    public string HelpText =>
-        """
-        连接扬声器
-        · 先在 iPhone/iPad 上打开 Chorus Speaker 并开始广播
-        · Host 会自动发现附近设备；点「连接」建立双通道
-        · 若发现失败，输入手机 IP 与端口 17482 手动连接
-        · 请与手机同一 Wi‑Fi，关闭 VPN；公司网常有客户端隔离
+    public string LocalSyncOffsetLabel =>
+        $"{L10n.T("sync.trim")}: {(LocalSyncOffsetMs >= 0 ? "+" : "")}{(int)LocalSyncOffsetMs} ms";
 
-        同步播放音频
-        · 选择音频或文件夹，或加载测试音调
-        · 可选「本机同时播放」
-        · 点「同步播放」按统一时间线推流
-
-        转播系统声音
-        · 点「统一转播系统声音」捕获 Windows 正在播放的声音
-        · 电脑与手机都会延迟约 1.2–1.5 秒以保持对齐
-        · 受 DRM 保护的内容可能采不到
-
-        常见问题
-        · 发现不到设备：改用个人热点或手动 IP
-        · 已连接无声音：确认 Speaker 已允许本地网络，并已进入就绪
-        """;
+    // Bound UI copy
+    public string LocTagline => L10n.T("host.tagline");
+    public string LocHelp => L10n.T("action.help");
+    public string LocLanguage => L10n.T("action.language");
+    public string LocAppearance => L10n.T("action.appearance");
+    public string LocAppearanceSystem => L10n.T("appearance.system");
+    public string LocAppearanceLight => L10n.T("appearance.light");
+    public string LocAppearanceDark => L10n.T("appearance.dark");
+    public string LocLangSystem => L10n.T("appearance.system");
+    public string LocLangZh => "简体中文";
+    public string LocLangEn => "English";
+    public string LocLangJa => "日本語";
+    public string LocLangKo => "한국어";
+    public string LocClose => L10n.T("action.close");
+    public string LocConnect => L10n.T("action.connect");
+    public string LocDisconnect => L10n.T("action.disconnect");
+    public string LocNearby => L10n.T("section.nearby");
+    public string LocManual => L10n.T("section.manual.connect");
+    public string LocSession => L10n.T("section.session");
+    public string LocPlayback => L10n.T("section.playback");
+    public string LocPlaylist => L10n.T("section.playlist");
+    public string LocPlayLocal => L10n.T("toggle.play.locally");
+    public string LocAutoNext => L10n.T("toggle.auto.next");
+    public string LocChooseAudio => L10n.T("action.choose.audio");
+    public string LocChooseFolder => L10n.T("action.choose.folder");
+    public string LocTestTone => L10n.T("action.test.tone");
+    public string LocSyncPlay => L10n.T("action.sync.play");
+    public string LocStop => L10n.T("action.stop");
+    public string LocClearPlaylist => L10n.T("action.playlist.clear");
+    public string LocHintDiscovery => L10n.T("hint.discovery");
+    public string LocHintConnect => L10n.T("hint.connect");
+    public string LocHintPlaylistEmpty => L10n.T("hint.playlist.empty");
+    public string LocPhoneIpWatermark => L10n.T("field.phone.ip");
+    public string LocPortWatermark => L10n.T("field.port");
+    public string LocNowPlaying => L10n.T("playlist.now.playing");
+    public string LocReady => L10n.T("status.ready");
+    public string LocTipPrev => L10n.T("tip.prev");
+    public string LocTipNext => L10n.T("tip.next");
+    public string LocHelpTitle => L10n.T("help.title");
+    public string LocSyncTrimHint => L10n.T("sync.trim.hint");
+    public string HelpText => L10n.T("help.body");
 
     public HostViewModel()
     {
+        L10n.LoadPreference();
+        LanguageLabel = L10n.SelectionDisplay;
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ChorusHost", "local-sync-offset.txt");
+            if (File.Exists(path) && double.TryParse(File.ReadAllText(path).Trim(), out var saved))
+                _localSyncOffsetMs = Math.Clamp(saved, -120, 120);
+        }
+        catch { }
+        _onLanguageChanged = () => Dispatcher.UIThread.Post(OnLanguageChanged);
         _controller = new HostSessionController();
+        _controller.LocalSyncOffsetSeconds = _localSyncOffsetMs / 1000.0;
         _controller.StateChanged += () => Dispatcher.UIThread.Post(Refresh);
+        L10n.LanguageChanged += _onLanguageChanged;
         try
         {
             _controller.StartListening();
         }
         catch (Exception ex)
         {
-            Error = $"启动失败：{ex.Message}（请检查端口是否被占用）";
+            Error = $"启动失败：{ex.Message}";
         }
         Refresh();
-        _diagTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => Refresh());
-        _diagTimer.Start();
+        _refreshTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => Refresh());
+        _refreshTimer.Start();
+    }
+
+    private void OnLanguageChanged()
+    {
+        LanguageLabel = L10n.SelectionDisplay;
+        RaiseLocProperties();
+        foreach (var row in DiscoveredPeers) row.RefreshLabels();
+        Refresh();
+    }
+
+    public void SetLanguage(string code) => L10n.Selection = code;
+
+    public void SetAppearanceMode(string mode)
+    {
+        AppearanceMode = mode;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AppearanceMode)));
+    }
+
+    private void RaiseLocProperties()
+    {
+        foreach (var name in new[]
+        {
+            nameof(LocTagline), nameof(LocHelp), nameof(LocLanguage), nameof(LocAppearance),
+            nameof(LocAppearanceSystem), nameof(LocAppearanceLight), nameof(LocAppearanceDark),
+            nameof(LocLangSystem), nameof(LocClose), nameof(LocConnect), nameof(LocDisconnect),
+            nameof(LocNearby), nameof(LocManual), nameof(LocSession), nameof(LocPlayback),
+            nameof(LocPlaylist), nameof(LocPlayLocal), nameof(LocAutoNext), nameof(LocChooseAudio),
+            nameof(LocChooseFolder), nameof(LocTestTone), nameof(LocSyncPlay), nameof(LocStop),
+            nameof(LocClearPlaylist), nameof(LocHintDiscovery), nameof(LocHintConnect),
+            nameof(LocHintPlaylistEmpty), nameof(LocPhoneIpWatermark), nameof(LocPortWatermark),
+            nameof(LocNowPlaying), nameof(LocReady), nameof(LocTipPrev), nameof(LocTipNext),
+            nameof(LocHelpTitle), nameof(HelpText), nameof(PauseResumeLabel),
+            nameof(SystemAudioButtonLabel), nameof(ManualConnectLabel), nameof(LanguageLabel),
+            nameof(LocSyncTrimHint), nameof(LocalSyncOffsetLabel),
+        })
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
     private void Refresh()
@@ -181,41 +302,38 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
         Status = _controller.StatusText;
         PhaseDisplay = _controller.CurrentPhase switch
         {
-            HostSessionController.Phase.Idle => "未开始",
-            HostSessionController.Phase.Discoverable => "可被发现",
-            HostSessionController.Phase.Connected => "已连接",
-            HostSessionController.Phase.SyncingClock => "校准时钟",
-            HostSessionController.Phase.Ready => "就绪",
-            HostSessionController.Phase.Playing => "播放中",
-            HostSessionController.Phase.Error => "错误",
+            HostSessionController.Phase.Idle => L10n.T("phase.idle"),
+            HostSessionController.Phase.Discoverable => L10n.T("phase.discoverable"),
+            HostSessionController.Phase.Connected => L10n.T("phase.connected"),
+            HostSessionController.Phase.SyncingClock => L10n.T("phase.calibrating"),
+            HostSessionController.Phase.Ready => L10n.T("phase.ready"),
+            HostSessionController.Phase.Playing => L10n.T("phase.playing"),
+            HostSessionController.Phase.Error => L10n.T("phase.error"),
             _ => _controller.CurrentPhase.ToString()
         };
 
         CurrentSource = _controller.CurrentSource;
-        CaptureInfo = _controller.CaptureInfo;
         IsStreamingSystemAudio = _controller.IsStreamingSystemAudio;
 
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasCurrentItem)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasItems)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanPlay)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanManualConnect)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ManualConnectLabel)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PauseResumeLabel)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLive)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasRTT)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RTTDisplay)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanStartSystemAudio)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanPlayLocal)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SystemAudioButtonLabel)));
 
         if (!string.IsNullOrEmpty(_controller.LocalIPv4))
         {
-            LocalIPDisplay = $"本机局域网 IP：{_controller.LocalIPv4}（请确认与手机同一网段）";
+            LocalIPDisplay = L10n.Format("hint.host.local.ip", _controller.LocalIPv4);
             HasLocalIP = true;
         }
         else HasLocalIP = false;
-
-        if (_controller.BestRTT.HasValue)
-        {
-            RTTDisplay = $"{(int)(_controller.BestRTT.Value * 1000)} ms";
-            HasRTT = true;
-        }
-        else HasRTT = false;
 
         Error = _controller.LastError;
         IsPlaying = _controller.CurrentPhase == HostSessionController.Phase.Playing;
@@ -230,23 +348,41 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
         HasSpeakers = Speakers.Count > 0;
         SpeakerCount = Speakers.Count;
 
-        var discovered = _controller.Browser.Peers.Values.ToList();
-        bool peersChanged = DiscoveredPeers.Count != discovered.Count
-            || !DiscoveredPeers.Select(p => p.InstanceName + p.IPAddress).SequenceEqual(
-                discovered.Select(p => p.InstanceName + p.IPAddress));
-        if (peersChanged)
-        {
-            DiscoveredPeers.Clear();
-            foreach (var p in discovered) DiscoveredPeers.Add(p);
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasDiscoveredPeers)));
-        }
+        SyncDiscoveredPeers();
 
         BrowserStatus = DiscoveredPeers.Count > 0
-            ? $"已发现 {DiscoveredPeers.Count} 台设备"
-            : "正在搜索附近扬声器…";
+            ? L10n.Format("status.devices.found", DiscoveredPeers.Count)
+            : L10n.T("status.searching");
     }
 
-    public bool IsPeerConnected(DiscoveredPeer peer) => _controller.IsConnectedToPeer(peer);
+    private void SyncDiscoveredPeers()
+    {
+        var discovered = _controller.Browser.Peers.Values
+            .OrderBy(p => p.InstanceName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var keys = discovered.Select(p => $"{p.IPAddress}:{p.Port}").ToHashSet(StringComparer.Ordinal);
+        bool structuralChange = DiscoveredPeers.Count != discovered.Count
+            || DiscoveredPeers.Any(r => !keys.Contains(r.EndpointKey));
+
+        if (structuralChange)
+        {
+            DiscoveredPeers.Clear();
+            foreach (var p in discovered)
+            {
+                DiscoveredPeers.Add(new PeerRowViewModel(p)
+                {
+                    IsConnected = _controller.IsConnectedToPeer(p),
+                });
+            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasDiscoveredPeers)));
+            return;
+        }
+
+        foreach (var row in DiscoveredPeers)
+            row.IsConnected = _controller.IsConnectedToPeer(row.Peer);
+    }
+
+    public void ConnectToPeerRow(PeerRowViewModel row) => ConnectToPeer(row.Peer);
 
     public void PlayDemoTone() => _controller.PlayDemoTone(PlayLocal);
 
@@ -344,7 +480,8 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
-        _diagTimer.Stop();
+        _refreshTimer.Stop();
+        L10n.LanguageChanged -= _onLanguageChanged;
         _controller.Dispose();
     }
 

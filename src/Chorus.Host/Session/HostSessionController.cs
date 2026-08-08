@@ -1,6 +1,7 @@
 using System.Net.Sockets;
 using System.Threading;
 using ChorusAudio.Capture;
+using ChorusAudio.Devices;
 using ChorusAudio.Playback;
 using ChorusCore.Audio;
 using ChorusCore.Network;
@@ -46,6 +47,9 @@ public sealed class HostSessionController : IDisposable
     private FileAudioCapture? _currentFileCapture;
     private Guid? _currentSessionId;
     private double _sessionStartHostPlayAt;
+    private double _sessionLead = 1.4;
+    private bool _sessionIsSystemAudio;
+    private CancellationTokenSource? _prepareCts;
     private double _liveSampleRate = SyncProtocol.SampleRate;
     private ulong _liveSequence;
     private readonly System.Collections.Concurrent.ConcurrentQueue<(AudioChunkHeader Header, byte[] Pcm)> _sendQueue = new();
@@ -57,6 +61,13 @@ public sealed class HostSessionController : IDisposable
     private volatile bool _paused;
     private volatile bool _disposed;
     private bool _streamingSystemAudio;
+    private VirtualAudioRouter? _virtualRouter;
+
+    /// <summary>
+    /// Local audible trim vs phone, in seconds. Positive = delay PC (fix PC-early);
+    /// negative = advance PC (fix PC-late). Applied on the next StartAt.
+    /// </summary>
+    public double LocalSyncOffsetSeconds { get; set; }
 
     public Phase CurrentPhase { get; private set; } = Phase.Idle;
     public string StatusText { get; private set; } = "未启动";
@@ -438,8 +449,129 @@ public sealed class HostSessionController : IDisposable
     public void PlayDemoTone(bool playLocal = false)
         => StartPlayback(new DemoToneCapture(), "Demo Tone A4", playLocal, systemAudio: false);
 
+    /// <summary>
+    /// Mac-style system audio: route default output through a virtual cable (VB-Cable),
+    /// capture that mix, then play locally + to speakers on one hostPlayAt timeline.
+    /// </summary>
     public void PlaySystemAudio(bool playLocal = false)
-        => StartPlayback(new WindowsLoopbackCapture(), "Windows 系统音频", playLocal, systemAudio: true);
+    {
+        bool hasRemote;
+        lock (_lock)
+        {
+            hasRemote = _audioByControl.Count > 0
+                ? _audioConnections.Count > 0
+                : _connections.Count > 0;
+        }
+        if (!hasRemote)
+        {
+            LastError = "转播系统声音需要先连接至少一台扬声器";
+            CurrentPhase = Phase.Error;
+            StateChanged?.Invoke();
+            return;
+        }
+
+        if (!VirtualAudioRouter.IsVirtualCableInstalled())
+        {
+            LastError = VirtualAudioRouter.MissingCableMessage;
+            CurrentPhase = Phase.Error;
+            StatusText = "缺少虚拟声卡";
+            StateChanged?.Invoke();
+            return;
+        }
+
+        StopPlayback();
+        _prepareCts = new CancellationTokenSource();
+        var token = _prepareCts.Token;
+        CurrentPhase = Phase.SyncingClock;
+        StatusText = "正在准备同步转播（切换虚拟声卡，请稍候）…";
+        StateChanged?.Invoke();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await StartSyncedSystemAudioAsync(token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+                CurrentPhase = Phase.Error;
+                StatusText = "系统音频转播失败";
+                try { _virtualRouter?.Dispose(); } catch { }
+                _virtualRouter = null;
+                StateChanged?.Invoke();
+            }
+        }, token);
+    }
+
+    private async Task StartSyncedSystemAudioAsync(CancellationToken token)
+    {
+        var router = VirtualAudioRouter.TryCreate()
+            ?? throw new InvalidOperationException(VirtualAudioRouter.MissingCableMessage);
+        _virtualRouter = router;
+
+        StatusText = $"正在将系统输出切换到 {router.VirtualRenderName}…";
+        StateChanged?.Invoke();
+        router.Activate();
+        // Core Audio / WASAPI needs time after default-device switch (Mac waits similarly).
+        await Task.Delay(1200, token).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+
+        const string title = "Windows 系统音频";
+        var sessionId = Guid.NewGuid();
+        _currentSessionId = sessionId;
+        _streamingSystemAudio = true;
+        _sessionIsSystemAudio = true;
+        _playLocal = true;
+        _liveSampleRate = SyncProtocol.SampleRate;
+        _liveSequence = 0;
+        _liveSampleIndex = 0;
+        _maxSample = 0;
+        _sendQueue.Clear();
+        CurrentSource = title;
+
+        Broadcast(new ControlPayload.PrepareSession(
+            new PrepareSessionData(sessionId, SyncProtocol.SampleRate, SyncProtocol.Channels, title)));
+        StatusText = "正在等待扬声器准备引擎…";
+        StateChanged?.Invoke();
+        await Task.Delay(700, token).ConfigureAwait(false);
+
+        if (token.IsCancellationRequested || _currentSessionId != sessionId) return;
+
+        // Same runway as file sync so PC speakers + iPhone share one timeline.
+        double lead = Math.Max(_adaptiveLeadTime.RecommendedLeadTime, 1.4);
+        _sessionLead = lead;
+        _sessionStartHostPlayAt = HostTime.Now() + lead;
+        Broadcast(new ControlPayload.StartPlayback(
+            new StartPlaybackData(sessionId, _sessionStartHostPlayAt, lead)));
+
+        var capture = new WindowsLoopbackCapture(router.VirtualRenderId);
+        _capture = capture;
+        _sending = true;
+        _sendTask = Task.Run(SendLoop);
+        _samplesHandler = samples => OnSamplesAvailable(samples, sessionId);
+        capture.SamplesAvailable += _samplesHandler;
+        capture.ErrorOccurred += err =>
+        {
+            LastError = err;
+            CurrentPhase = Phase.Error;
+            StateChanged?.Invoke();
+        };
+
+        // Play on the real speakers (not the virtual cable) at hostPlayAt ± trim.
+        _localPlayer = new LocalAudioPlayer(SyncProtocol.SampleRate, SyncProtocol.Channels);
+        _localPlayer.StartAt(_sessionStartHostPlayAt, router.PhysicalRenderId, LocalSyncOffsetSeconds);
+
+        capture.Start();
+        if (capture.CaptureFormat.Length == 0 && !string.IsNullOrEmpty(LastError))
+            throw new InvalidOperationException(LastError);
+
+        CurrentPhase = Phase.Playing;
+        StatusText =
+            $"同步转播中：本机「{router.PhysicalRenderName}」+ 手机（lead {(int)(lead * 1000)} ms）";
+        StateChanged?.Invoke();
+    }
 
     public void PlayPlaylistTrack(string filePath, string title, bool playLocal = false)
         => StartPlayback(new FileAudioCapture(filePath, title), title, playLocal, systemAudio: false);
@@ -468,23 +600,52 @@ public sealed class HostSessionController : IDisposable
 
         _capture = capture;
         _streamingSystemAudio = systemAudio;
+        _sessionIsSystemAudio = systemAudio;
+        _playLocal = playLocal;
         var sessionId = Guid.NewGuid();
         _currentSessionId = sessionId;
-        double lead = _adaptiveLeadTime.RecommendedLeadTime;
-        _sessionStartHostPlayAt = HostTime.Now() + lead;
         _liveSampleRate = SyncProtocol.SampleRate;
         _liveSequence = 0;
         _liveSampleIndex = 0;
+        _maxSample = 0;
+        _sendQueue.Clear();
 
+        // Match Mac: prepare first so iOS can rebuild AVAudioEngine before hostPlayAt is frozen.
         Broadcast(new ControlPayload.PrepareSession(
             new PrepareSessionData(sessionId, SyncProtocol.SampleRate, SyncProtocol.Channels, title)));
+        CurrentSource = title;
+        CurrentPhase = Phase.SyncingClock;
+        StatusText = $"正在准备：{title}";
+        StateChanged?.Invoke();
+
+        _prepareCts = new CancellationTokenSource();
+        var token = _prepareCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(700, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { return; }
+
+            if (token.IsCancellationRequested || _currentSessionId != sessionId) return;
+            BeginStreamingAfterPrepare(capture, title, playLocal, sessionId);
+        }, token);
+    }
+
+    private void BeginStreamingAfterPrepare(
+        IAudioCapture capture, string title, bool playLocal, Guid sessionId)
+    {
+        if (_currentSessionId != sessionId || _disposed) return;
+
+        double lead = Math.Max(_adaptiveLeadTime.RecommendedLeadTime, 1.4);
+        _sessionLead = lead;
+        _sessionStartHostPlayAt = HostTime.Now() + lead;
+
         Broadcast(new ControlPayload.StartPlayback(
             new StartPlaybackData(sessionId, _sessionStartHostPlayAt, lead)));
 
-        _playLocal = playLocal;
         _sending = true;
-        _maxSample = 0;
-        _sendQueue.Clear();
         _sendTask = Task.Run(SendLoop);
         _samplesHandler = samples => OnSamplesAvailable(samples, sessionId);
         capture.SamplesAvailable -= _samplesHandler;
@@ -495,7 +656,6 @@ public sealed class HostSessionController : IDisposable
             CurrentPhase = Phase.Error;
             StateChanged?.Invoke();
         };
-        capture.Start();
 
         if (capture is FileAudioCapture fac)
         {
@@ -503,13 +663,23 @@ public sealed class HostSessionController : IDisposable
             fac.FileEnded += OnFileEnded;
         }
 
-        if (_muteLocal && capture is WindowsLoopbackCapture)
-            ApplyLocalMute();
-
-        if (_playLocal)
+        if (playLocal)
         {
             _localPlayer = new LocalAudioPlayer(SyncProtocol.SampleRate, SyncProtocol.Channels);
-            _localPlayer.Start();
+            _localPlayer.StartAt(_sessionStartHostPlayAt, outputDeviceId: null, LocalSyncOffsetSeconds);
+        }
+
+        try
+        {
+            capture.Start();
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+            CurrentPhase = Phase.Error;
+            StatusText = "捕获启动失败";
+            StateChanged?.Invoke();
+            return;
         }
 
         CurrentSource = title;
@@ -561,8 +731,6 @@ public sealed class HostSessionController : IDisposable
 
     private async Task SendLoop()
     {
-        const double targetBuffered = 1.0;
-
         while (_sending)
         {
             if (_paused)
@@ -578,6 +746,8 @@ public sealed class HostSessionController : IDisposable
                 continue;
             }
 
+            // Keep 1.1–1.3s buffered on speakers (Mac file + synced system-audio path).
+            double targetBuffered = Math.Clamp(_sessionLead * 0.9, 1.1, 1.3);
             double wait = item.Header.HostPlayAt - HostTime.Now() - targetBuffered;
             if (wait > 0)
                 await Task.Delay(TimeSpan.FromMilliseconds(wait * 1000));
@@ -592,11 +762,12 @@ public sealed class HostSessionController : IDisposable
                     : _connections.ToList(); // legacy single-TCP fallback
             }
 
-            foreach (var conn in snapshot)
+            // Independent send per speaker so one slow TCP doesn't stall the others.
+            var tasks = snapshot.Select(async conn =>
             {
-                if (!_sending) break;
                 try { await conn.SendAudioAsync(item.Header, item.Pcm); } catch { }
-            }
+            });
+            await Task.WhenAll(tasks);
         }
     }
 
@@ -665,6 +836,10 @@ public sealed class HostSessionController : IDisposable
 
     public void StopPlayback()
     {
+        try { _prepareCts?.Cancel(); } catch { }
+        try { _prepareCts?.Dispose(); } catch { }
+        _prepareCts = null;
+
         if (_currentSessionId.HasValue)
             Broadcast(new ControlPayload.StopPlayback(_currentSessionId.Value));
 
@@ -672,11 +847,15 @@ public sealed class HostSessionController : IDisposable
         _sending = false;
         _paused = false;
         _streamingSystemAudio = false;
+        _sessionIsSystemAudio = false;
         try { _sendTask?.Wait(500); } catch { }
         _sendTask = null;
         while (_sendQueue.TryDequeue(out _)) { }
         try { _localPlayer?.Stop(); } catch { }
         _localPlayer = null;
+        // Restore Windows default output after virtual-cable routing (Mac restores BlackHole too).
+        try { _virtualRouter?.Dispose(); } catch { }
+        _virtualRouter = null;
         if (_currentFileCapture != null)
         {
             try { _currentFileCapture.FileEnded -= OnFileEnded; } catch { }

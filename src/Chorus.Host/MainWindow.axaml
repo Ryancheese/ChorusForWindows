@@ -8,239 +8,432 @@
         xmlns:audio="clr-namespace:ChorusCore.Audio;assembly=ChorusCore"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="800"
         x:Class="Chorus.Host.MainWindow"
+        x:Name="Root"
         x:DataType="vm:HostViewModel"
         Title="Chorus Host"
         Width="1100" Height="800"
-        MinWidth="920" MinHeight="720"
+        MinWidth="920" MinHeight="640"
         WindowStartupLocation="CenterScreen"
-        Background="#0A0F1A">
+        Background="{DynamicResource WindowBgBrush}">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="AccentBrush" Color="#2E85DC"/>
-        <SolidColorBrush x:Key="AccentSoftBrush" Color="#59B8EB"/>
-        <SolidColorBrush x:Key="MintBrush" Color="#73D1C7"/>
-        <SolidColorBrush x:Key="PanelBrush" Color="#99141C2B"/>
-        <SolidColorBrush x:Key="PanelBorderBrush" Color="#33FFFFFF"/>
-        <SolidColorBrush x:Key="TextPrimary" Color="#F1F5F9"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#94A3B8"/>
-        <SolidColorBrush x:Key="TextMuted" Color="#64748B"/>
-        <SolidColorBrush x:Key="WarnBg" Color="#33F59E0B"/>
-        <SolidColorBrush x:Key="WarnFg" Color="#FBBF24"/>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="WindowBgBrush" Color="#0A0F1A"/>
+                    <SolidColorBrush x:Key="AccentBrush" Color="#2E85DC"/>
+                    <SolidColorBrush x:Key="AccentSoftBrush" Color="#59B8EB"/>
+                    <SolidColorBrush x:Key="MintBrush" Color="#73D1C7"/>
+                    <SolidColorBrush x:Key="PanelBrush" Color="#99141C2B"/>
+                    <SolidColorBrush x:Key="PanelBorderBrush" Color="#33FFFFFF"/>
+                    <SolidColorBrush x:Key="TextPrimary" Color="#F1F5F9"/>
+                    <SolidColorBrush x:Key="TextSecondary" Color="#94A3B8"/>
+                    <SolidColorBrush x:Key="TextMuted" Color="#64748B"/>
+                    <SolidColorBrush x:Key="WarnBg" Color="#33F59E0B"/>
+                    <SolidColorBrush x:Key="WarnFg" Color="#FBBF24"/>
+                    <SolidColorBrush x:Key="GlassFill" Color="#22FFFFFF"/>
+                    <SolidColorBrush x:Key="GlassFillHover" Color="#33FFFFFF"/>
+                    <SolidColorBrush x:Key="FieldBg" Color="#22000000"/>
+                    <SolidColorBrush x:Key="RowBg" Color="#18000000"/>
+                    <SolidColorBrush x:Key="DividerBrush" Color="#22FFFFFF"/>
+                    <SolidColorBrush x:Key="PlaylistHover" Color="#221E3A5F"/>
+                    <SolidColorBrush x:Key="PlaylistCurrent" Color="#332E85DC"/>
+                    <SolidColorBrush x:Key="HelpOverlay" Color="#CC0A0F1A"/>
+                    <SolidColorBrush x:Key="ErrorBrush" Color="#F87171"/>
+                    <Color x:Key="Grad0">#0A0F1A</Color>
+                    <Color x:Key="Grad1">#121C2E</Color>
+                    <Color x:Key="Grad2">#0D1422</Color>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="WindowBgBrush" Color="#E8F0F8"/>
+                    <SolidColorBrush x:Key="AccentBrush" Color="#2E85DC"/>
+                    <SolidColorBrush x:Key="AccentSoftBrush" Color="#1D6BB8"/>
+                    <SolidColorBrush x:Key="MintBrush" Color="#0D9488"/>
+                    <SolidColorBrush x:Key="PanelBrush" Color="#E6FFFFFF"/>
+                    <SolidColorBrush x:Key="PanelBorderBrush" Color="#22000000"/>
+                    <SolidColorBrush x:Key="TextPrimary" Color="#0F172A"/>
+                    <SolidColorBrush x:Key="TextSecondary" Color="#475569"/>
+                    <SolidColorBrush x:Key="TextMuted" Color="#64748B"/>
+                    <SolidColorBrush x:Key="WarnBg" Color="#33F59E0B"/>
+                    <SolidColorBrush x:Key="WarnFg" Color="#B45309"/>
+                    <SolidColorBrush x:Key="GlassFill" Color="#14000000"/>
+                    <SolidColorBrush x:Key="GlassFillHover" Color="#1F000000"/>
+                    <SolidColorBrush x:Key="FieldBg" Color="#0A000000"/>
+                    <SolidColorBrush x:Key="RowBg" Color="#0A000000"/>
+                    <SolidColorBrush x:Key="DividerBrush" Color="#18000000"/>
+                    <SolidColorBrush x:Key="PlaylistHover" Color="#142E85DC"/>
+                    <SolidColorBrush x:Key="PlaylistCurrent" Color="#332E85DC"/>
+                    <SolidColorBrush x:Key="HelpOverlay" Color="#99E8F0F8"/>
+                    <SolidColorBrush x:Key="ErrorBrush" Color="#DC2626"/>
+                    <Color x:Key="Grad0">#E6F0FA</Color>
+                    <Color x:Key="Grad1">#F5FAFF</Color>
+                    <Color x:Key="Grad2">#DCE8F5</Color>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
 
-        <StreamGeometry x:Key="IconSkipBack">M6,6 L8,6 8,18 6,18 Z M8,12 L20,6 20,18 Z</StreamGeometry>
-        <StreamGeometry x:Key="IconSkipForward">M16,6 L18,6 18,18 16,18 Z M4,6 L16,12 4,18 Z</StreamGeometry>
+            <StreamGeometry x:Key="IconSkipBack">M6,6 L8,6 8,18 6,18 Z M8,12 L20,6 20,18 Z</StreamGeometry>
+            <StreamGeometry x:Key="IconSkipForward">M16,6 L18,6 18,18 16,18 Z M4,6 L16,12 4,18 Z</StreamGeometry>
+            <!-- SF Symbol stand-ins (stroke paths in 24×24): dot.radiowaves / speaker.wave.3 -->
+            <StreamGeometry x:Key="IconRadiowavesArcs">M8.1,8.3 C6.7,9.5 5.9,10.7 5.9,12 C5.9,13.3 6.7,14.5 8.1,15.7 M5.2,6.1 C3.2,7.9 2.1,9.8 2.1,12 C2.1,14.2 3.2,16.1 5.2,17.9 M15.9,8.3 C17.3,9.5 18.1,10.7 18.1,12 C18.1,13.3 17.3,14.5 15.9,15.7 M18.8,6.1 C20.8,7.9 21.9,9.8 21.9,12 C21.9,14.2 20.8,16.1 18.8,17.9</StreamGeometry>
+            <StreamGeometry x:Key="IconSpeakerBody">M3.2,8.8 L3.2,15.2 L7.4,15.2 L12.2,19.2 L12.2,4.8 L7.4,8.8 Z</StreamGeometry>
+            <StreamGeometry x:Key="IconSpeakerArcs">M14.8,9.2 C15.8,10.2 16.4,11.2 16.4,12.5 C16.4,13.8 15.8,14.8 14.8,15.8 M17.2,7 C18.8,8.6 19.7,10.4 19.7,12.5 C19.7,14.6 18.8,16.4 17.2,18 M19.6,4.8 C21.8,7 23,9.6 23,12.5 C23,15.4 21.8,18 19.6,20.2</StreamGeometry>
+            <LinearGradientBrush x:Key="OrbIconGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="#2E85DC" Offset="0"/>
+                <GradientStop Color="#73D1C7" Offset="1"/>
+            </LinearGradientBrush>
+            <StreamGeometry x:Key="IconQuestionCircle">M12,2 A10,10 0 1,0 12,22 A10,10 0 1,0 12,2 Z M12,16.8 A1.3,1.3 0 1,0 12,19.4 A1.3,1.3 0 1,0 12,16.8 Z M12,6.2 C10.1,6.2 8.7,7.6 8.7,9.4 L10.7,9.4 C10.7,8.6 11.2,8 12,8 C12.8,8 13.3,8.6 13.3,9.4 C13.3,10.2 12.6,10.7 11.9,11.3 C11,12.1 10.2,13 10.2,14.5 L12.2,14.5 C12.2,13.6 12.7,13.1 13.5,12.4 C14.5,11.5 15.5,10.6 15.5,9.3 C15.5,7.5 14,6.2 12,6.2 Z</StreamGeometry>
+            <StreamGeometry x:Key="IconGlobe">M12,2 A10,10 0 1,0 12,22 A10,10 0 1,0 12,2 Z M2.5,12 L21.5,12 M12,2 C9.5,4.5 8,8 8,12 C8,16 9.5,19.5 12,22 C14.5,19.5 16,16 16,12 C16,8 14.5,4.5 12,2 Z M4.2,7.2 C6.8,8.2 9.3,8.7 12,8.7 C14.7,8.7 17.2,8.2 19.8,7.2 M4.2,16.8 C6.8,15.8 9.3,15.3 12,15.3 C14.7,15.3 17.2,15.8 19.8,16.8</StreamGeometry>
+            <StreamGeometry x:Key="IconMoon">M13.5,3.2 C10.2,3.8 7.8,6.7 7.8,10.2 C7.8,14.3 11.1,17.6 15.2,17.6 C16.8,17.6 18.2,17.1 19.4,16.2 C18.1,19.2 15.1,21.3 11.6,21.3 C6.7,21.3 2.7,17.3 2.7,12.4 C2.7,7.8 5.7,4 10,3.1 C11.1,2.9 12.3,2.9 13.5,3.2 Z</StreamGeometry>
 
-        <ControlTheme x:Key="GlassSecondaryButton" TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Background" Value="#22FFFFFF"/>
-            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="20"/>
-            <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Template">
-                <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{TemplateBinding CornerRadius}"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          Content="{TemplateBinding Content}"/>
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^:pointerover /template/ Border">
-                <Setter Property="Background" Value="#33FFFFFF"/>
-            </Style>
-            <Style Selector="^:disabled">
-                <Setter Property="Opacity" Value="0.45"/>
-            </Style>
-        </ControlTheme>
+            <ControlTheme x:Key="GlassSecondaryButton" TargetType="Button">
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                <Setter Property="Background" Value="{DynamicResource GlassFill}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="999"/>
+                <Setter Property="Padding" Value="16,10"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Template">
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^:pointerover /template/ Border">
+                    <Setter Property="Background" Value="{DynamicResource GlassFillHover}"/>
+                </Style>
+                <Style Selector="^:disabled">
+                    <Setter Property="Opacity" Value="0.45"/>
+                </Style>
+            </ControlTheme>
 
-        <ControlTheme x:Key="GlassPrimaryButton" TargetType="Button">
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="CornerRadius" Value="22"/>
-            <Setter Property="Padding" Value="22,10"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Template">
-                <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="{TemplateBinding CornerRadius}"
-                            Padding="{TemplateBinding Padding}"
-                            BoxShadow="0 8 24 0 #402E85DC">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          Content="{TemplateBinding Content}"/>
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^:pointerover /template/ Border">
-                <Setter Property="Background" Value="#3A93E8"/>
-            </Style>
-            <Style Selector="^:disabled">
-                <Setter Property="Opacity" Value="0.4"/>
-            </Style>
-        </ControlTheme>
+            <ControlTheme x:Key="GlassPrimaryButton" TargetType="Button">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="CornerRadius" Value="22"/>
+                <Setter Property="Padding" Value="22,10"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Template">
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Padding="{TemplateBinding Padding}"
+                                BoxShadow="0 8 24 0 #402E85DC">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^:pointerover /template/ Border">
+                    <Setter Property="Background" Value="#3A93E8"/>
+                </Style>
+                <Style Selector="^:disabled">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </Style>
+            </ControlTheme>
 
-        <ControlTheme x:Key="MediaIconButton" TargetType="Button">
-            <Setter Property="Width" Value="36"/>
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="CornerRadius" Value="18"/>
-            <Setter Property="Template">
-                <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="{TemplateBinding CornerRadius}">
-                        <Path Data="{TemplateBinding Content}" Fill="{TemplateBinding Foreground}"
-                              Width="16" Height="16" Stretch="Uniform"
-                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^:pointerover">
-                <Setter Property="Background" Value="#22FFFFFF"/>
-            </Style>
-            <Style Selector="^:disabled">
-                <Setter Property="Opacity" Value="0.4"/>
-            </Style>
-        </ControlTheme>
+            <ControlTheme x:Key="MediaIconButton" TargetType="Button">
+                <Setter Property="Width" Value="36"/>
+                <Setter Property="Height" Value="36"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="CornerRadius" Value="18"/>
+                <Setter Property="Template">
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding CornerRadius}">
+                            <Path Data="{TemplateBinding Content}" Fill="{TemplateBinding Foreground}"
+                                  Width="16" Height="16" Stretch="Uniform"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource GlassFill}"/>
+                </Style>
+                <Style Selector="^:disabled">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </Style>
+            </ControlTheme>
+        </ResourceDictionary>
     </Window.Resources>
 
     <Window.Styles>
         <Style Selector="Border.GlassPanel">
-            <Setter Property="Background" Value="{StaticResource PanelBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="24"/>
             <Setter Property="Padding" Value="20"/>
             <Setter Property="BoxShadow" Value="0 12 40 0 #28000000"/>
         </Style>
         <Style Selector="Border.PlaylistRow:pointerover">
-            <Setter Property="Background" Value="#221E3A5F"/>
+            <Setter Property="Background" Value="{DynamicResource PlaylistHover}"/>
         </Style>
         <Style Selector="TextBox.GlassField">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Background" Value="#22000000"/>
-            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource FieldBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="12"/>
             <Setter Property="Padding" Value="12,10"/>
             <Setter Property="FontSize" Value="13"/>
         </Style>
+        <Style Selector="ScrollBar">
+            <Setter Property="AllowAutoHide" Value="False"/>
+        </Style>
     </Window.Styles>
 
     <Panel>
+        <!-- Mac LiquidGlassBackground: base gradient + 3 drifting soft blobs -->
         <Grid>
             <Grid.Background>
                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                    <GradientStop Color="#0A0F1A" Offset="0"/>
-                    <GradientStop Color="#121C2E" Offset="0.45"/>
-                    <GradientStop Color="#0D1422" Offset="1"/>
+                    <GradientStop Color="{DynamicResource Grad0}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource Grad1}" Offset="0.45"/>
+                    <GradientStop Color="{DynamicResource Grad2}" Offset="1"/>
                 </LinearGradientBrush>
             </Grid.Background>
-            <Ellipse Width="360" Height="360" HorizontalAlignment="Left" VerticalAlignment="Top"
-                     Margin="-80,-120,0,0" Opacity="0.35">
-                <Ellipse.Fill>
-                    <RadialGradientBrush>
-                        <GradientStop Color="#59B8EB" Offset="0"/>
-                        <GradientStop Color="Transparent" Offset="1"/>
-                    </RadialGradientBrush>
-                </Ellipse.Fill>
-            </Ellipse>
-            <Ellipse Width="300" Height="300" HorizontalAlignment="Right" VerticalAlignment="Center"
-                     Margin="0,0,-60,40" Opacity="0.28">
-                <Ellipse.Fill>
-                    <RadialGradientBrush>
-                        <GradientStop Color="#73D1C7" Offset="0"/>
-                        <GradientStop Color="Transparent" Offset="1"/>
-                    </RadialGradientBrush>
-                </Ellipse.Fill>
-            </Ellipse>
         </Grid>
+        <Canvas x:Name="LiquidGlassLayer" IsHitTestVisible="False" ClipToBounds="False">
+            <!-- accentSoft blob (top-left cyan) -->
+            <Ellipse x:Name="GlassBlobCyan" Width="420" Height="420" Opacity="0.45">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#A059B8EB" Offset="0"/>
+                        <GradientStop Color="#6659B8EB" Offset="0.35"/>
+                        <GradientStop Color="#2059B8EB" Offset="0.65"/>
+                        <GradientStop Color="#0059B8EB" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <!-- mint blob (right) -->
+            <Ellipse x:Name="GlassBlobMint" Width="360" Height="360" Opacity="0.38">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#9973D1C7" Offset="0"/>
+                        <GradientStop Color="#5573D1C7" Offset="0.4"/>
+                        <GradientStop Color="#1873D1C7" Offset="0.7"/>
+                        <GradientStop Color="#0073D1C7" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <!-- mist / "white" soft light (lower-center) — the Mac highlight the user pointed at -->
+            <Ellipse x:Name="GlassBlobMist" Width="340" Height="340" Opacity="0.55">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#99C8D4E4" Offset="0"/>
+                        <GradientStop Color="#55A8B8CC" Offset="0.35"/>
+                        <GradientStop Color="#332E3B52" Offset="0.7"/>
+                        <GradientStop Color="#002E3B52" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+        </Canvas>
 
-        <ScrollViewer Padding="28" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="22">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      AllowAutoHide="False">
+            <!-- Padding on child (not ScrollViewer) so bottom inset is part of scroll extent -->
+            <StackPanel Spacing="22" Margin="28,28,28,56">
 
-                <DockPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="18" DockPanel.Dock="Left">
-                        <Border Width="52" Height="52" CornerRadius="26"
-                                Background="{StaticResource AccentBrush}"
-                                BoxShadow="0 8 24 0 #402E85DC">
-                            <Ellipse Width="12" Height="12" Fill="White"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel Spacing="4" VerticalAlignment="Center">
-                            <TextBlock Text="Chorus" FontSize="36" FontWeight="Bold"
-                                       Foreground="{StaticResource TextPrimary}"/>
-                            <TextBlock Text="把 Windows 的声音，同步到身边的 iPhone 与 iPad"
-                                       FontSize="13" Foreground="{StaticResource TextSecondary}"/>
+                <!-- Mac HostApp header: PulsingOrb + title + glass pill buttons -->
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Orientation="Horizontal" Spacing="18">
+                        <!-- PulsingOrb: glow driven in code-behind (XAML Style.Animations were too subtle / flaky) -->
+                        <Grid Width="180" Height="180">
+                            <Ellipse x:Name="OrbGlow"
+                                     Width="150" Height="150"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     IsHitTestVisible="False">
+                                <Ellipse.Fill>
+                                    <RadialGradientBrush>
+                                        <GradientStop Color="#A059B8EB" Offset="0"/>
+                                        <GradientStop Color="#6659B8EB" Offset="0.4"/>
+                                        <GradientStop Color="#0059B8EB" Offset="1"/>
+                                    </RadialGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                            <Ellipse x:Name="OrbGlowRipple"
+                                     Width="150" Height="150"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Opacity="0" IsHitTestVisible="False">
+                                <Ellipse.Fill>
+                                    <RadialGradientBrush>
+                                        <GradientStop Color="#002E85DC" Offset="0.3"/>
+                                        <GradientStop Color="#552E85DC" Offset="0.7"/>
+                                        <GradientStop Color="#002E85DC" Offset="1"/>
+                                    </RadialGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
+
+                            <Border Width="112" Height="112" CornerRadius="56"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Background="{DynamicResource PanelBrush}"
+                                    BorderThickness="1.2"
+                                    BoxShadow="0 10 24 0 #22000000">
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="#CCFFFFFF" Offset="0"/>
+                                        <GradientStop Color="#40FFFFFF" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                            </Border>
+
+                            <!-- Idle: dot.radiowaves.left.and.right (SF Symbol proportions) -->
+                            <Viewbox Width="48" Height="48"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Stretch="Uniform"
+                                     IsVisible="{Binding !IsPlaying}">
+                                <Canvas Width="24" Height="24">
+                                    <Ellipse Canvas.Left="9.4" Canvas.Top="9.4" Width="5.2" Height="5.2"
+                                             Fill="{StaticResource OrbIconGradient}"/>
+                                    <Path Data="{StaticResource IconRadiowavesArcs}"
+                                          Fill="Transparent"
+                                          Stroke="{StaticResource OrbIconGradient}"
+                                          StrokeThickness="1.85"
+                                          StrokeLineCap="Round"/>
+                                </Canvas>
+                            </Viewbox>
+
+                            <!-- Playing: speaker.wave.3.fill -->
+                            <Viewbox Width="48" Height="48"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Stretch="Uniform"
+                                     IsVisible="{Binding IsPlaying}">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource IconSpeakerBody}"
+                                          Fill="{StaticResource OrbIconGradient}"/>
+                                    <Path Data="{StaticResource IconSpeakerArcs}"
+                                          Fill="Transparent"
+                                          Stroke="{StaticResource OrbIconGradient}"
+                                          StrokeThickness="1.7"
+                                          StrokeLineCap="Round"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Grid>
+                        <StackPanel Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Text="Chorus" FontSize="40" FontWeight="Bold"
+                                       FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif"
+                                       Foreground="{DynamicResource TextPrimary}"/>
+                            <TextBlock Text="{Binding LocTagline}"
+                                       FontSize="15" FontWeight="Normal"
+                                       FontFamily="Segoe UI Variable Text, Segoe UI, sans-serif"
+                                       Foreground="{DynamicResource TextSecondary}"
+                                       TextWrapping="Wrap" MaxWidth="420"/>
                         </StackPanel>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
-                                HorizontalAlignment="Right">
-                        <Button Content="使用帮助" Theme="{StaticResource GlassSecondaryButton}"
-                                Click="Help_Click"/>
-                        <Button Content="外观" Theme="{StaticResource GlassSecondaryButton}"
-                                Click="Appearance_Click"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+                                VerticalAlignment="Center" Margin="16,0,0,0">
+                        <Button Theme="{StaticResource GlassSecondaryButton}" Click="Help_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Path Data="{StaticResource IconQuestionCircle}" Width="15" Height="15"
+                                      Stretch="Uniform" Fill="{DynamicResource TextPrimary}"
+                                      VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding LocHelp}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Theme="{StaticResource GlassSecondaryButton}">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuItem Header="{Binding LocLangSystem}" Tag="system" Click="LanguageMenu_Click"/>
+                                    <MenuItem Header="{Binding LocLangZh}" Tag="zh-Hans" Click="LanguageMenu_Click"/>
+                                    <MenuItem Header="{Binding LocLangEn}" Tag="en" Click="LanguageMenu_Click"/>
+                                    <MenuItem Header="{Binding LocLangJa}" Tag="ja" Click="LanguageMenu_Click"/>
+                                    <MenuItem Header="{Binding LocLangKo}" Tag="ko" Click="LanguageMenu_Click"/>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Path Data="{StaticResource IconGlobe}" Width="15" Height="15"
+                                      Stretch="Uniform" Stroke="{DynamicResource TextPrimary}" StrokeThickness="1.4"
+                                      Fill="Transparent" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding LocLanguage}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Theme="{StaticResource GlassSecondaryButton}">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuItem Header="{Binding LocAppearanceSystem}" Tag="system" Click="AppearanceMenu_Click"/>
+                                    <MenuItem Header="{Binding LocAppearanceLight}" Tag="light" Click="AppearanceMenu_Click"/>
+                                    <MenuItem Header="{Binding LocAppearanceDark}" Tag="dark" Click="AppearanceMenu_Click"/>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Path Data="{StaticResource IconMoon}" Width="14" Height="14"
+                                      Stretch="Uniform" Fill="{DynamicResource TextPrimary}"
+                                      VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding LocAppearance}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
-                </DockPanel>
+                </Grid>
 
                 <Border Classes="GlassPanel">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="{Binding PhaseDisplay}" FontSize="20" FontWeight="Bold"
-                                       Foreground="{StaticResource TextPrimary}"/>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Spacing="4" Margin="16,0,0,0"
+                                    VerticalAlignment="Top" HorizontalAlignment="Right"
+                                    IsVisible="{Binding HasRTT}">
+                            <TextBlock Text="RTT" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondary}"
+                                       HorizontalAlignment="Right"/>
+                            <TextBlock Text="{Binding RTTDisplay}" FontSize="22" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       HorizontalAlignment="Right"/>
+                        </StackPanel>
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{Binding PhaseDisplay}" FontSize="18" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimary}"/>
                             <TextBlock Text="{Binding Status}" FontSize="13"
-                                       Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding Error}" FontSize="12" Foreground="#F87171"
+                                       Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Error}" FontSize="12"
+                                       Foreground="{DynamicResource ErrorBrush}"
                                        IsVisible="{Binding HasError}" TextWrapping="Wrap"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="2" Margin="16,0,0,0"
-                                    IsVisible="{Binding HasRTT}">
-                            <TextBlock Text="RTT" FontSize="11" Foreground="{StaticResource TextMuted}"
-                                       HorizontalAlignment="Right"/>
-                            <TextBlock Text="{Binding RTTDisplay}" FontSize="22" FontWeight="Bold"
-                                       Foreground="{StaticResource AccentSoftBrush}"
-                                       HorizontalAlignment="Right"/>
-                        </StackPanel>
-                    </Grid>
+                    </DockPanel>
                 </Border>
 
                 <Border Classes="GlassPanel">
                     <StackPanel Spacing="16">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="附近扬声器" FontSize="16" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimary}"/>
-                            <Border CornerRadius="12" Padding="14,12" Background="{StaticResource WarnBg}"
+                            <TextBlock Text="{Binding LocNearby}" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimary}"/>
+                            <Border CornerRadius="12" Padding="14,12" Background="{DynamicResource WarnBg}"
                                     IsVisible="{Binding !HasDiscoveredPeers}">
-                                <TextBlock FontSize="12" Foreground="{StaticResource WarnFg}" TextWrapping="Wrap"
-                                           Text="自动发现失败时，请用下方手动连接。公司/访客 Wi‑Fi 常会屏蔽组播或隔离客户端，可改用个人热点。"/>
+                                <TextBlock FontSize="12" Foreground="{DynamicResource WarnFg}" TextWrapping="Wrap"
+                                           Text="{Binding LocHintDiscovery}"/>
                             </Border>
                             <TextBlock Text="{Binding BrowserStatus}" FontSize="12"
-                                       Foreground="{StaticResource TextMuted}"/>
+                                       Foreground="{DynamicResource TextMuted}"/>
                             <ItemsControl ItemsSource="{Binding DiscoveredPeers}"
                                           IsVisible="{Binding HasDiscoveredPeers}">
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="mdns:DiscoveredPeer">
+                                    <DataTemplate x:DataType="vm:PeerRowViewModel">
                                         <Border Margin="0,4" Padding="12,10" CornerRadius="12"
-                                                Background="#18000000" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                                Background="{DynamicResource RowBg}"
+                                                BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1">
                                             <DockPanel>
-                                                <Button DockPanel.Dock="Right" Content="连接"
+                                                <Button DockPanel.Dock="Right"
+                                                        Content="{Binding ActionLabel}"
                                                         Theme="{StaticResource GlassSecondaryButton}"
                                                         Click="PeerConnect_Click" Tag="{Binding}"/>
                                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding InstanceName}" FontSize="14"
                                                                FontWeight="SemiBold"
-                                                               Foreground="{StaticResource TextPrimary}"/>
-                                                    <TextBlock Text="{Binding IPAddress}" FontSize="12"
-                                                               Foreground="{StaticResource TextMuted}"/>
+                                                               Foreground="{DynamicResource TextPrimary}"/>
+                                                    <TextBlock Text="{Binding IPDisplay}" FontSize="12"
+                                                               Foreground="{DynamicResource TextMuted}"/>
                                                 </StackPanel>
                                             </DockPanel>
                                         </Border>
@@ -249,53 +442,56 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <Border Height="1" Background="#22FFFFFF" Opacity="0.6"/>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" Opacity="0.6"/>
 
                         <StackPanel Spacing="10">
-                            <TextBlock Text="手动连接" FontSize="16" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Text="{Binding LocManual}" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimary}"/>
                             <TextBlock Text="{Binding LocalIPDisplay}" FontSize="12"
-                                       Foreground="{StaticResource TextSecondary}"
+                                       Foreground="{DynamicResource TextSecondary}"
                                        IsVisible="{Binding HasLocalIP}"/>
                             <Grid ColumnDefinitions="*,Auto,Auto">
                                 <TextBox Classes="GlassField"
                                          Text="{Binding ManualIP}"
-                                         Watermark="手机 IP，如 192.168.1.8"/>
+                                         Watermark="{Binding LocPhoneIpWatermark}"/>
                                 <TextBox Grid.Column="1" Classes="GlassField" Width="90" Margin="10,0,0,0"
                                          Text="{Binding ManualPort}"
-                                         Watermark="端口"/>
-                                <Button Grid.Column="2" Content="连接" Margin="10,0,0,0"
+                                         Watermark="{Binding LocPortWatermark}"/>
+                                <Button Grid.Column="2" Content="{Binding ManualConnectLabel}" Margin="10,0,0,0"
                                         Theme="{StaticResource GlassSecondaryButton}"
                                         Click="ManualConnect_Click"
                                         IsEnabled="{Binding CanManualConnect}"/>
                             </Grid>
                         </StackPanel>
 
-                        <Border Height="1" Background="#22FFFFFF" Opacity="0.6"/>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" Opacity="0.6"/>
 
                         <StackPanel Spacing="10">
-                            <TextBlock Text="已加入会话" FontSize="16" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimary}"/>
-                            <TextBlock Text="连接一台设备后即可同步播放" FontSize="12"
-                                       Foreground="{StaticResource TextMuted}"
+                            <TextBlock Text="{Binding LocSession}" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimary}"/>
+                            <TextBlock Text="{Binding LocHintConnect}" FontSize="12"
+                                       Foreground="{DynamicResource TextMuted}"
                                        IsVisible="{Binding !HasSpeakers}"/>
                             <ItemsControl ItemsSource="{Binding Speakers}" IsVisible="{Binding HasSpeakers}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="protocol:DeviceInfo">
                                         <Border Margin="0,4" Padding="12,10" CornerRadius="12"
-                                                Background="#18000000" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                                Background="{DynamicResource RowBg}"
+                                                BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1">
                                             <DockPanel>
-                                                <Button DockPanel.Dock="Right" Content="移除"
+                                                <Button DockPanel.Dock="Right"
+                                                        Content="{Binding #Root.((vm:HostViewModel)DataContext).LocDisconnect}"
                                                         Theme="{StaticResource GlassSecondaryButton}"
                                                         Click="RemoveSpeaker_Click" Tag="{Binding}"/>
                                                 <StackPanel Orientation="Horizontal" Spacing="10"
                                                             VerticalAlignment="Center">
-                                                    <TextBlock Text="✓" Foreground="{StaticResource MintBrush}"
+                                                    <TextBlock Text="✓" Foreground="{DynamicResource MintBrush}"
                                                                FontSize="14" FontWeight="Bold"/>
                                                     <TextBlock Text="{Binding Name}" FontSize="14"
-                                                               Foreground="{StaticResource TextPrimary}"/>
-                                                    <TextBlock Text="就绪" FontSize="12"
-                                                               Foreground="{StaticResource TextMuted}"/>
+                                                               Foreground="{DynamicResource TextPrimary}"/>
+                                                    <TextBlock Text="{Binding #Root.((vm:HostViewModel)DataContext).LocReady}"
+                                                               FontSize="12"
+                                                               Foreground="{DynamicResource TextMuted}"/>
                                                 </StackPanel>
                                             </DockPanel>
                                         </Border>
@@ -307,21 +503,22 @@
                 </Border>
 
                 <Border Classes="GlassPanel">
-                    <Grid ColumnDefinitions="*,Auto,300">
+                    <Grid ColumnDefinitions="*,Auto,*">
                         <StackPanel Spacing="14" Margin="0,0,20,0">
-                            <TextBlock Text="播放" FontSize="16" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimary}"/>
-                            <CheckBox Content="本机同时播放" IsChecked="{Binding PlayLocal}"
-                                      Foreground="{StaticResource TextSecondary}"/>
-                            <CheckBox Content="播完自动下一首" IsChecked="{Binding Playlist.AutoAdvance}"
+                            <TextBlock Text="{Binding LocPlayback}" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimary}"/>
+                            <CheckBox Content="{Binding LocPlayLocal}" IsChecked="{Binding PlayLocal}"
+                                      IsEnabled="{Binding CanPlayLocal}"
+                                      Foreground="{DynamicResource TextSecondary}"/>
+                            <CheckBox Content="{Binding LocAutoNext}" IsChecked="{Binding Playlist.AutoAdvance}"
                                       IsEnabled="{Binding AutoAdvanceEnabled}"
-                                      Foreground="{StaticResource TextSecondary}"/>
+                                      Foreground="{DynamicResource TextSecondary}"/>
                             <WrapPanel>
-                                <Button Content="选择音频" Click="SelectAudio_Click" Margin="0,0,8,6"
+                                <Button Content="{Binding LocChooseAudio}" Click="SelectAudio_Click" Margin="0,0,8,6"
                                         Theme="{StaticResource GlassSecondaryButton}"/>
-                                <Button Content="选择文件夹" Click="SelectFolder_Click" Margin="0,0,8,6"
+                                <Button Content="{Binding LocChooseFolder}" Click="SelectFolder_Click" Margin="0,0,8,6"
                                         Theme="{StaticResource GlassSecondaryButton}"/>
-                                <Button Content="测试音调" Click="PlayDemoTone_Click" Margin="0,0,0,6"
+                                <Button Content="{Binding LocTestTone}" Click="PlayDemoTone_Click" Margin="0,0,0,6"
                                         Theme="{StaticResource GlassSecondaryButton}"/>
                             </WrapPanel>
                             <Button Content="{Binding SystemAudioButtonLabel}"
@@ -329,79 +526,88 @@
                                     HorizontalAlignment="Left"
                                     Theme="{StaticResource GlassSecondaryButton}"
                                     IsEnabled="{Binding CanStartSystemAudio}"/>
+                            <StackPanel Spacing="4" Margin="0,4,0,0">
+                                <TextBlock Text="{Binding LocalSyncOffsetLabel}" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}"/>
+                                <Slider Minimum="-120" Maximum="120" TickFrequency="5"
+                                        IsSnapToTickEnabled="True"
+                                        Value="{Binding LocalSyncOffsetMs}"/>
+                                <TextBlock Text="{Binding LocSyncTrimHint}" FontSize="11"
+                                           Foreground="{DynamicResource TextMuted}" TextWrapping="Wrap"/>
+                            </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6"
                                         IsVisible="{Binding HasCurrentItem}">
-                                <TextBlock Text="当前：" FontSize="13" Foreground="{StaticResource TextMuted}"/>
+                                <TextBlock Text="{Binding LocNowPlaying}" FontSize="13"
+                                           Foreground="{DynamicResource TextMuted}"/>
                                 <TextBlock Text="{Binding Playlist.Current.Title}" FontSize="13"
-                                           Foreground="{StaticResource AccentSoftBrush}" FontWeight="Medium"/>
+                                           Foreground="{DynamicResource AccentSoftBrush}" FontWeight="Medium"/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
                                 <Button Click="PlayPrev_Click"
                                         Theme="{StaticResource MediaIconButton}"
                                         Content="{StaticResource IconSkipBack}"
-                                        ToolTip.Tip="上一首"/>
-                                <Button Content="同步播放" Click="PlayCurrent_Click" Margin="4,0"
+                                        ToolTip.Tip="{Binding LocTipPrev}"/>
+                                <Button Content="{Binding LocSyncPlay}" Click="PlayCurrent_Click" Margin="4,0"
                                         Theme="{StaticResource GlassPrimaryButton}"
                                         IsEnabled="{Binding CanPlay}"/>
                                 <Button Click="PlayNext_Click"
                                         Theme="{StaticResource MediaIconButton}"
                                         Content="{StaticResource IconSkipForward}"
-                                        ToolTip.Tip="下一首"/>
+                                        ToolTip.Tip="{Binding LocTipNext}"/>
                                 <Button Content="{Binding PauseResumeLabel}" Click="PauseResume_Click"
                                         Theme="{StaticResource GlassSecondaryButton}"
                                         IsEnabled="{Binding CanPauseResume}" Margin="6,0,0,0"/>
-                                <Button Content="停止" Click="Stop_Click"
+                                <Button Content="{Binding LocStop}" Click="Stop_Click"
                                         Theme="{StaticResource GlassSecondaryButton}"
                                         IsEnabled="{Binding IsPlaying}" Margin="6,0,0,0"/>
                             </StackPanel>
                         </StackPanel>
 
-                        <Border Grid.Column="1" Width="1" Background="#22FFFFFF" Margin="0,4" Opacity="0.6"/>
+                        <Border Grid.Column="1" Width="1" Background="{DynamicResource DividerBrush}" Margin="0,4" Opacity="0.6"/>
 
                         <StackPanel Grid.Column="2" Spacing="10" Margin="20,0,0,0">
                             <DockPanel>
-                                <TextBlock Text="播放列表" FontSize="16" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextPrimary}"/>
+                                <TextBlock Text="{Binding LocPlaylist}" FontSize="16" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimary}"/>
                                 <TextBlock Text="{Binding Playlist.Items.Count}" FontSize="13"
-                                           Foreground="{StaticResource TextMuted}"
+                                           Foreground="{DynamicResource TextMuted}"
                                            DockPanel.Dock="Right" HorizontalAlignment="Right"/>
                             </DockPanel>
-                            <TextBlock Text="从左侧选择音频或文件夹加入列表"
-                                       FontSize="12" Foreground="{StaticResource TextMuted}"
+                            <TextBlock Text="{Binding LocHintPlaylistEmpty}"
+                                       FontSize="12" Foreground="{DynamicResource TextMuted}"
                                        IsVisible="{Binding !HasItems}"/>
-                            <ScrollViewer MaxHeight="260" HorizontalScrollBarVisibility="Disabled"
+                            <ItemsControl ItemsSource="{Binding Playlist.Items}"
                                           IsVisible="{Binding HasItems}">
-                                <ItemsControl ItemsSource="{Binding Playlist.Items}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="audio:PlaylistItem">
-                                            <Border Classes="PlaylistRow" CornerRadius="10" Margin="0,2">
-                                                <Grid>
-                                                    <Border CornerRadius="10" Background="#332E85DC"
-                                                            IsVisible="{Binding IsCurrent}"/>
-                                                    <Grid Margin="10,8" ColumnDefinitions="*,Auto">
-                                                        <Button Grid.Column="0" Click="PlaylistPlay_Click"
-                                                                Tag="{Binding}" Padding="0"
-                                                                HorizontalAlignment="Stretch"
-                                                                HorizontalContentAlignment="Left"
-                                                                Background="Transparent" BorderThickness="0"
-                                                                Cursor="Hand">
-                                                            <TextBlock Text="{Binding Title}" FontSize="13"
-                                                                       Foreground="{StaticResource TextPrimary}"
-                                                                       TextTrimming="CharacterEllipsis"/>
-                                                        </Button>
-                                                        <Button Grid.Column="1" Content="✕" FontSize="11"
-                                                                Foreground="{StaticResource TextMuted}"
-                                                                Background="Transparent" BorderThickness="0"
-                                                                Click="PlaylistRemove_Click" Tag="{Binding}"
-                                                                Width="24" Height="24" Padding="0"/>
-                                                    </Grid>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="audio:PlaylistItem">
+                                        <Border Classes="PlaylistRow" CornerRadius="10" Margin="0,2">
+                                            <Grid>
+                                                <Border CornerRadius="10"
+                                                        Background="{DynamicResource PlaylistCurrent}"
+                                                        IsVisible="{Binding IsCurrent}"/>
+                                                <Grid Margin="10,8" ColumnDefinitions="*,Auto">
+                                                    <Button Grid.Column="0" Click="PlaylistPlay_Click"
+                                                            Tag="{Binding}" Padding="0"
+                                                            HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Left"
+                                                            Background="Transparent" BorderThickness="0"
+                                                            Cursor="Hand">
+                                                        <TextBlock Text="{Binding Title}" FontSize="13"
+                                                                   Foreground="{DynamicResource TextPrimary}"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                    </Button>
+                                                    <Button Grid.Column="1" Content="✕" FontSize="11"
+                                                            Foreground="{DynamicResource TextMuted}"
+                                                            Background="Transparent" BorderThickness="0"
+                                                            Click="PlaylistRemove_Click" Tag="{Binding}"
+                                                            Width="24" Height="24" Padding="0"/>
                                                 </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                            <Button Content="清空列表" Click="ClearPlaylist_Click"
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Content="{Binding LocClearPlaylist}" Click="ClearPlaylist_Click"
                                     IsEnabled="{Binding HasItems}"
                                     Theme="{StaticResource GlassSecondaryButton}"
                                     HorizontalAlignment="Left"/>
@@ -409,32 +615,25 @@
                     </Grid>
                 </Border>
 
-                <StackPanel Spacing="8">
-                    <CheckBox Content="显示诊断信息" IsChecked="{Binding ShowDiagnostics}"
-                              Foreground="{StaticResource TextMuted}" FontSize="12"/>
-                    <Border Classes="GlassPanel" IsVisible="{Binding ShowDiagnostics}" Padding="16,12">
-                        <TextBlock Text="{Binding CaptureInfo}" FontSize="11"
-                                   Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
-                                   FontFamily="Consolas, Cascadia Code, Courier New"/>
-                    </Border>
-                </StackPanel>
+                <!-- Extra scroll slack so last controls aren't clipped by window chrome -->
+                <Border Height="32"/>
             </StackPanel>
         </ScrollViewer>
 
-        <Border IsVisible="{Binding HelpVisible}" Background="#CC0A0F1A" ZIndex="10">
+        <Border IsVisible="{Binding HelpVisible}" Background="{DynamicResource HelpOverlay}" ZIndex="10">
             <Border Classes="GlassPanel" Width="520" MaxHeight="520"
                     HorizontalAlignment="Center" VerticalAlignment="Center" Margin="28">
                 <DockPanel>
                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,16">
-                        <TextBlock Text="使用帮助" FontSize="20" FontWeight="Bold"
-                                   Foreground="{StaticResource TextPrimary}"/>
-                        <Button Content="关闭" DockPanel.Dock="Right" HorizontalAlignment="Right"
+                        <TextBlock Text="{Binding LocHelpTitle}" FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                        <Button Content="{Binding LocClose}" DockPanel.Dock="Right" HorizontalAlignment="Right"
                                 Theme="{StaticResource GlassSecondaryButton}"
                                 Click="CloseHelp_Click"/>
                     </DockPanel>
-                    <ScrollViewer>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
                         <TextBlock Text="{Binding HelpText}" FontSize="13" LineHeight="22"
-                                   Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                                   Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"/>
                     </ScrollViewer>
                 </DockPanel>
             </Border>
