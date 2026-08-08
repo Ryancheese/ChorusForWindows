@@ -4,9 +4,9 @@ using System.Text;
 namespace ChorusCore.Network.Mdns;
 
 /// <summary>
-/// Minimal DNS message codec for mDNS service advertising. Only implements the
-/// subset needed to parse incoming questions and build PTR/SRV/TXT/A responses.
-/// RFC 1035 wire format, big-endian.
+/// Minimal DNS message codec for mDNS service advertising/browsing. Only implements the
+/// subset needed to parse questions/answers and build PTR/SRV/TXT/A responses.
+/// RFC 1035 wire format, big-endian; follows name compression pointers (required for iOS Bonjour).
 /// </summary>
 internal enum DnsRecordType : ushort
 {
@@ -31,6 +31,8 @@ internal sealed class DnsResourceRecord
     public ushort Class { get; set; } = 1;
     public uint Ttl { get; set; }
     public byte[] Rdata { get; set; } = Array.Empty<byte>();
+    /// <summary>Absolute offset of RDATA within the original packet (for compression-aware rdata parsing).</summary>
+    public int RdataOffset { get; set; }
 }
 
 internal static class DnsCodec
@@ -54,29 +56,53 @@ internal static class DnsCodec
         return (questions, true);
     }
 
-    private static bool TryReadName(byte[] data, ref int offset, out string name)
+    /// <summary>
+    /// Read a DNS domain name, following compression pointers (RFC 1035 §4.1.4).
+    /// On return, <paramref name="offset"/> points just past this name field in the message
+    /// (after the pointer or terminating zero), even if the name jumped elsewhere.
+    /// </summary>
+    internal static bool TryReadName(byte[] data, ref int offset, out string name)
     {
         name = "";
-        var sb = new StringBuilder();
+        var labels = new List<string>();
         int safety = 0;
-        while (offset < data.Length && data[offset] != 0)
+        bool jumped = false;
+        int resumeOffset = offset;
+
+        while (offset < data.Length)
         {
             if (++safety > 128) return false;
             byte len = data[offset];
-            if ((len & 0xC0) == 0xC0)
+            if (len == 0)
             {
-                // Compression pointer — we don't follow it (questions don't normally use them).
-                offset += 2;
+                if (!jumped) offset++;
+                else offset = resumeOffset;
                 break;
             }
+
+            if ((len & 0xC0) == 0xC0)
+            {
+                if (offset + 1 >= data.Length) return false;
+                int pointer = ((len & 0x3F) << 8) | data[offset + 1];
+                if (pointer >= data.Length) return false;
+                if (!jumped)
+                {
+                    resumeOffset = offset + 2;
+                    jumped = true;
+                }
+                offset = pointer;
+                continue;
+            }
+
+            if ((len & 0xC0) != 0) return false; // reserved label types
             offset++;
             if (offset + len > data.Length) return false;
-            if (sb.Length > 0) sb.Append('.');
-            sb.Append(Encoding.ASCII.GetString(data, offset, len));
+            // mDNS allows UTF-8 labels (iOS device names).
+            labels.Add(Encoding.UTF8.GetString(data, offset, len));
             offset += len;
         }
-        if (offset < data.Length && data[offset] == 0) offset++;
-        name = sb.ToString();
+
+        name = string.Join(".", labels);
         return true;
     }
 
@@ -112,7 +138,7 @@ internal static class DnsCodec
         if (string.IsNullOrEmpty(name)) { ms.WriteByte(0); return; }
         foreach (var label in name.Split('.'))
         {
-            var bytes = Encoding.ASCII.GetBytes(label);
+            var bytes = Encoding.UTF8.GetBytes(label);
             if (bytes.Length == 0 || bytes.Length > 63) continue;
             ms.WriteByte((byte)bytes.Length);
             ms.Write(bytes, 0, bytes.Length);
@@ -158,7 +184,7 @@ internal static class DnsCodec
         foreach (var kv in kvps)
         {
             var s = $"{kv.Key}={kv.Value}";
-            var bytes = Encoding.ASCII.GetBytes(s);
+            var bytes = Encoding.UTF8.GetBytes(s);
             if (bytes.Length > 255) continue;
             ms.WriteByte((byte)bytes.Length);
             ms.Write(bytes, 0, bytes.Length);
@@ -186,7 +212,7 @@ internal static class DnsCodec
         return ms.ToArray();
     }
 
-    /// <summary>Parse Answer + Additional sections of a DNS packet. Returns both lists.</summary>
+    /// <summary>Parse Answer + Authority + Additional sections of a DNS packet.</summary>
     public static (List<DnsResourceRecord> Answers, List<DnsResourceRecord> Additionals) TryParseAnswers(byte[] data)
     {
         var answers = new List<DnsResourceRecord>();
@@ -195,23 +221,26 @@ internal static class DnsCodec
 
         ushort qdCount = (ushort)((data[4] << 8) | data[5]);
         ushort anCount = (ushort)((data[6] << 8) | data[7]);
+        ushort nsCount = (ushort)((data[8] << 8) | data[9]);
         ushort arCount = (ushort)((data[10] << 8) | data[11]);
 
         int offset = 12;
-        // skip questions
         for (int i = 0; i < qdCount; i++)
         {
             if (!TryReadName(data, ref offset, out _)) return (answers, additionals);
             if (offset + 4 > data.Length) return (answers, additionals);
             offset += 4;
         }
-        // read answers
         for (int i = 0; i < anCount; i++)
         {
             if (!TryReadRecord(data, ref offset, out var rec)) return (answers, additionals);
             answers.Add(rec);
         }
-        // read additionals
+        // Skip authority so Additional offsets stay aligned (iOS packets may include NS).
+        for (int i = 0; i < nsCount; i++)
+        {
+            if (!TryReadRecord(data, ref offset, out _)) return (answers, additionals);
+        }
         for (int i = 0; i < arCount; i++)
         {
             if (!TryReadRecord(data, ref offset, out var rec)) return (answers, additionals);
@@ -233,27 +262,37 @@ internal static class DnsCodec
         if (offset + rdlen > data.Length) return false;
         var rdata = new byte[rdlen];
         Buffer.BlockCopy(data, offset, rdata, 0, rdlen);
+        int rdataOffset = offset;
         offset += rdlen;
-        rec = new DnsResourceRecord { Name = name, Type = type, Class = cls, Ttl = ttl, Rdata = rdata };
+        rec = new DnsResourceRecord
+        {
+            Name = name,
+            Type = type,
+            Class = cls,
+            Ttl = ttl,
+            Rdata = rdata,
+            RdataOffset = rdataOffset,
+        };
         return true;
     }
 
-    /// <summary>Parse SRV rdata → (priority, weight, port, target). Target may contain DNS compression pointers.</summary>
-    public static bool TryParseSrv(byte[] rdata, byte[] packet, int packetOffset, out ushort port, out string target)
+    /// <summary>Parse SRV rdata → (port, target). Target names may use compression pointers into <paramref name="packet"/>.</summary>
+    public static bool TryParseSrv(byte[] rdata, byte[] packet, int rdataPacketOffset, out ushort port, out string target)
     {
         port = 0;
         target = "";
-        if (rdata.Length < 7) return false;
+        if (rdata.Length < 7 || rdataPacketOffset < 0) return false;
         port = (ushort)((rdata[4] << 8) | rdata[5]);
-        int offset = 6;
-        return TryReadName(rdata, ref offset, out target);
+        int offset = rdataPacketOffset + 6;
+        return TryReadName(packet, ref offset, out target);
     }
 
-    /// <summary>Parse PTR rdata → instance name (may contain DNS compression pointers).</summary>
-    public static bool TryParsePtr(byte[] rdata, out string name)
+    /// <summary>Parse PTR rdata → instance name (may contain DNS compression pointers into <paramref name="packet"/>).</summary>
+    public static bool TryParsePtr(byte[] rdata, byte[] packet, int rdataPacketOffset, out string name)
     {
         name = "";
-        int offset = 0;
-        return TryReadName(rdata, ref offset, out name);
+        if (rdataPacketOffset < 0) return false;
+        int offset = rdataPacketOffset;
+        return TryReadName(packet, ref offset, out name);
     }
 }

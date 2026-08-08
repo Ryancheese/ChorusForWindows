@@ -79,8 +79,13 @@ dotnet run --project src/Chorus.Speaker/Chorus.Speaker.csproj
 - [x] mDNS 浏览 + 手动 IP
 - [x] Host UI 对齐 mac 三段式布局（状态 / 设备 / 播放+列表）
 
+## 系统声音同步转播
+
+与 Mac 端 BlackHole 同思路：需安装免费虚拟声卡 [VB-Audio Virtual Cable](https://vb-audio.com/Cable/)。Chorus 会把系统默认输出切到 `CABLE Input`，环回采集后再按同一 `hostPlayAt` 播放到本机音箱与手机；停止后恢复原设备。
+
 ## 已知限制
 
 - 本机播放为同流镜像，调度精度弱于 CoreAudio `hostPlayAt`
 - 暂停为本地丢弃采样，非协议级 pause
 - DRM 流可能采不到（与 macOS 同类限制）
+- 未安装虚拟声卡时无法做 Mac 式双方同延的系统转播
