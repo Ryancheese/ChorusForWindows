@@ -1,0 +1,443 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:Chorus.Host.ViewModels"
+        xmlns:protocol="clr-namespace:ChorusCore.Protocol;assembly=ChorusCore"
+        xmlns:mdns="clr-namespace:ChorusCore.Network.Mdns;assembly=ChorusCore"
+        xmlns:audio="clr-namespace:ChorusCore.Audio;assembly=ChorusCore"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="800"
+        x:Class="Chorus.Host.MainWindow"
+        x:DataType="vm:HostViewModel"
+        Title="Chorus Host"
+        Width="1100" Height="800"
+        MinWidth="920" MinHeight="720"
+        WindowStartupLocation="CenterScreen"
+        Background="#0A0F1A">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="AccentBrush" Color="#2E85DC"/>
+        <SolidColorBrush x:Key="AccentSoftBrush" Color="#59B8EB"/>
+        <SolidColorBrush x:Key="MintBrush" Color="#73D1C7"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#99141C2B"/>
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#33FFFFFF"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="#F1F5F9"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#94A3B8"/>
+        <SolidColorBrush x:Key="TextMuted" Color="#64748B"/>
+        <SolidColorBrush x:Key="WarnBg" Color="#33F59E0B"/>
+        <SolidColorBrush x:Key="WarnFg" Color="#FBBF24"/>
+
+        <StreamGeometry x:Key="IconSkipBack">M6,6 L8,6 8,18 6,18 Z M8,12 L20,6 20,18 Z</StreamGeometry>
+        <StreamGeometry x:Key="IconSkipForward">M16,6 L18,6 18,18 16,18 Z M4,6 L16,12 4,18 Z</StreamGeometry>
+
+        <ControlTheme x:Key="GlassSecondaryButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="Background" Value="#22FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="20"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border">
+                <Setter Property="Background" Value="#33FFFFFF"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45"/>
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="GlassPrimaryButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="22"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}"
+                            BoxShadow="0 8 24 0 #402E85DC">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border">
+                <Setter Property="Background" Value="#3A93E8"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.4"/>
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="MediaIconButton" TargetType="Button">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                        <Path Data="{TemplateBinding Content}" Fill="{TemplateBinding Foreground}"
+                              Width="16" Height="16" Stretch="Uniform"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="#22FFFFFF"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.4"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="Border.GlassPanel">
+            <Setter Property="Background" Value="{StaticResource PanelBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="24"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="BoxShadow" Value="0 12 40 0 #28000000"/>
+        </Style>
+        <Style Selector="Border.PlaylistRow:pointerover">
+            <Setter Property="Background" Value="#221E3A5F"/>
+        </Style>
+        <Style Selector="TextBox.GlassField">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="Background" Value="#22000000"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+    </Window.Styles>
+
+    <Panel>
+        <Grid>
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="#0A0F1A" Offset="0"/>
+                    <GradientStop Color="#121C2E" Offset="0.45"/>
+                    <GradientStop Color="#0D1422" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
+            <Ellipse Width="360" Height="360" HorizontalAlignment="Left" VerticalAlignment="Top"
+                     Margin="-80,-120,0,0" Opacity="0.35">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#59B8EB" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse Width="300" Height="300" HorizontalAlignment="Right" VerticalAlignment="Center"
+                     Margin="0,0,-60,40" Opacity="0.28">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#73D1C7" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+        </Grid>
+
+        <ScrollViewer Padding="28" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="22">
+
+                <DockPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="18" DockPanel.Dock="Left">
+                        <Border Width="52" Height="52" CornerRadius="26"
+                                Background="{StaticResource AccentBrush}"
+                                BoxShadow="0 8 24 0 #402E85DC">
+                            <Ellipse Width="12" Height="12" Fill="White"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Chorus" FontSize="36" FontWeight="Bold"
+                                       Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Text="把 Windows 的声音，同步到身边的 iPhone 与 iPad"
+                                       FontSize="13" Foreground="{StaticResource TextSecondary}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                HorizontalAlignment="Right">
+                        <Button Content="使用帮助" Theme="{StaticResource GlassSecondaryButton}"
+                                Click="Help_Click"/>
+                        <Button Content="外观" Theme="{StaticResource GlassSecondaryButton}"
+                                Click="Appearance_Click"/>
+                    </StackPanel>
+                </DockPanel>
+
+                <Border Classes="GlassPanel">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{Binding PhaseDisplay}" FontSize="20" FontWeight="Bold"
+                                       Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Text="{Binding Status}" FontSize="13"
+                                       Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Error}" FontSize="12" Foreground="#F87171"
+                                       IsVisible="{Binding HasError}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="2" Margin="16,0,0,0"
+                                    IsVisible="{Binding HasRTT}">
+                            <TextBlock Text="RTT" FontSize="11" Foreground="{StaticResource TextMuted}"
+                                       HorizontalAlignment="Right"/>
+                            <TextBlock Text="{Binding RTTDisplay}" FontSize="22" FontWeight="Bold"
+                                       Foreground="{StaticResource AccentSoftBrush}"
+                                       HorizontalAlignment="Right"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Classes="GlassPanel">
+                    <StackPanel Spacing="16">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="附近扬声器" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}"/>
+                            <Border CornerRadius="12" Padding="14,12" Background="{StaticResource WarnBg}"
+                                    IsVisible="{Binding !HasDiscoveredPeers}">
+                                <TextBlock FontSize="12" Foreground="{StaticResource WarnFg}" TextWrapping="Wrap"
+                                           Text="自动发现失败时，请用下方手动连接。公司/访客 Wi‑Fi 常会屏蔽组播或隔离客户端，可改用个人热点。"/>
+                            </Border>
+                            <TextBlock Text="{Binding BrowserStatus}" FontSize="12"
+                                       Foreground="{StaticResource TextMuted}"/>
+                            <ItemsControl ItemsSource="{Binding DiscoveredPeers}"
+                                          IsVisible="{Binding HasDiscoveredPeers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="mdns:DiscoveredPeer">
+                                        <Border Margin="0,4" Padding="12,10" CornerRadius="12"
+                                                Background="#18000000" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right" Content="连接"
+                                                        Theme="{StaticResource GlassSecondaryButton}"
+                                                        Click="PeerConnect_Click" Tag="{Binding}"/>
+                                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding InstanceName}" FontSize="14"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource TextPrimary}"/>
+                                                    <TextBlock Text="{Binding IPAddress}" FontSize="12"
+                                                               Foreground="{StaticResource TextMuted}"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <Border Height="1" Background="#22FFFFFF" Opacity="0.6"/>
+
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="手动连接" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Text="{Binding LocalIPDisplay}" FontSize="12"
+                                       Foreground="{StaticResource TextSecondary}"
+                                       IsVisible="{Binding HasLocalIP}"/>
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <TextBox Classes="GlassField"
+                                         Text="{Binding ManualIP}"
+                                         Watermark="手机 IP，如 192.168.1.8"/>
+                                <TextBox Grid.Column="1" Classes="GlassField" Width="90" Margin="10,0,0,0"
+                                         Text="{Binding ManualPort}"
+                                         Watermark="端口"/>
+                                <Button Grid.Column="2" Content="连接" Margin="10,0,0,0"
+                                        Theme="{StaticResource GlassSecondaryButton}"
+                                        Click="ManualConnect_Click"
+                                        IsEnabled="{Binding CanManualConnect}"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <Border Height="1" Background="#22FFFFFF" Opacity="0.6"/>
+
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="已加入会话" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Text="连接一台设备后即可同步播放" FontSize="12"
+                                       Foreground="{StaticResource TextMuted}"
+                                       IsVisible="{Binding !HasSpeakers}"/>
+                            <ItemsControl ItemsSource="{Binding Speakers}" IsVisible="{Binding HasSpeakers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="protocol:DeviceInfo">
+                                        <Border Margin="0,4" Padding="12,10" CornerRadius="12"
+                                                Background="#18000000" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right" Content="移除"
+                                                        Theme="{StaticResource GlassSecondaryButton}"
+                                                        Click="RemoveSpeaker_Click" Tag="{Binding}"/>
+                                                <StackPanel Orientation="Horizontal" Spacing="10"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="✓" Foreground="{StaticResource MintBrush}"
+                                                               FontSize="14" FontWeight="Bold"/>
+                                                    <TextBlock Text="{Binding Name}" FontSize="14"
+                                                               Foreground="{StaticResource TextPrimary}"/>
+                                                    <TextBlock Text="就绪" FontSize="12"
+                                                               Foreground="{StaticResource TextMuted}"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="GlassPanel">
+                    <Grid ColumnDefinitions="*,Auto,300">
+                        <StackPanel Spacing="14" Margin="0,0,20,0">
+                            <TextBlock Text="播放" FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}"/>
+                            <CheckBox Content="本机同时播放" IsChecked="{Binding PlayLocal}"
+                                      Foreground="{StaticResource TextSecondary}"/>
+                            <CheckBox Content="播完自动下一首" IsChecked="{Binding Playlist.AutoAdvance}"
+                                      IsEnabled="{Binding AutoAdvanceEnabled}"
+                                      Foreground="{StaticResource TextSecondary}"/>
+                            <WrapPanel>
+                                <Button Content="选择音频" Click="SelectAudio_Click" Margin="0,0,8,6"
+                                        Theme="{StaticResource GlassSecondaryButton}"/>
+                                <Button Content="选择文件夹" Click="SelectFolder_Click" Margin="0,0,8,6"
+                                        Theme="{StaticResource GlassSecondaryButton}"/>
+                                <Button Content="测试音调" Click="PlayDemoTone_Click" Margin="0,0,0,6"
+                                        Theme="{StaticResource GlassSecondaryButton}"/>
+                            </WrapPanel>
+                            <Button Content="{Binding SystemAudioButtonLabel}"
+                                    Click="PlaySystemAudio_Click"
+                                    HorizontalAlignment="Left"
+                                    Theme="{StaticResource GlassSecondaryButton}"
+                                    IsEnabled="{Binding CanStartSystemAudio}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6"
+                                        IsVisible="{Binding HasCurrentItem}">
+                                <TextBlock Text="当前：" FontSize="13" Foreground="{StaticResource TextMuted}"/>
+                                <TextBlock Text="{Binding Playlist.Current.Title}" FontSize="13"
+                                           Foreground="{StaticResource AccentSoftBrush}" FontWeight="Medium"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                                <Button Click="PlayPrev_Click"
+                                        Theme="{StaticResource MediaIconButton}"
+                                        Content="{StaticResource IconSkipBack}"
+                                        ToolTip.Tip="上一首"/>
+                                <Button Content="同步播放" Click="PlayCurrent_Click" Margin="4,0"
+                                        Theme="{StaticResource GlassPrimaryButton}"
+                                        IsEnabled="{Binding CanPlay}"/>
+                                <Button Click="PlayNext_Click"
+                                        Theme="{StaticResource MediaIconButton}"
+                                        Content="{StaticResource IconSkipForward}"
+                                        ToolTip.Tip="下一首"/>
+                                <Button Content="{Binding PauseResumeLabel}" Click="PauseResume_Click"
+                                        Theme="{StaticResource GlassSecondaryButton}"
+                                        IsEnabled="{Binding CanPauseResume}" Margin="6,0,0,0"/>
+                                <Button Content="停止" Click="Stop_Click"
+                                        Theme="{StaticResource GlassSecondaryButton}"
+                                        IsEnabled="{Binding IsPlaying}" Margin="6,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Border Grid.Column="1" Width="1" Background="#22FFFFFF" Margin="0,4" Opacity="0.6"/>
+
+                        <StackPanel Grid.Column="2" Spacing="10" Margin="20,0,0,0">
+                            <DockPanel>
+                                <TextBlock Text="播放列表" FontSize="16" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimary}"/>
+                                <TextBlock Text="{Binding Playlist.Items.Count}" FontSize="13"
+                                           Foreground="{StaticResource TextMuted}"
+                                           DockPanel.Dock="Right" HorizontalAlignment="Right"/>
+                            </DockPanel>
+                            <TextBlock Text="从左侧选择音频或文件夹加入列表"
+                                       FontSize="12" Foreground="{StaticResource TextMuted}"
+                                       IsVisible="{Binding !HasItems}"/>
+                            <ScrollViewer MaxHeight="260" HorizontalScrollBarVisibility="Disabled"
+                                          IsVisible="{Binding HasItems}">
+                                <ItemsControl ItemsSource="{Binding Playlist.Items}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="audio:PlaylistItem">
+                                            <Border Classes="PlaylistRow" CornerRadius="10" Margin="0,2">
+                                                <Grid>
+                                                    <Border CornerRadius="10" Background="#332E85DC"
+                                                            IsVisible="{Binding IsCurrent}"/>
+                                                    <Grid Margin="10,8" ColumnDefinitions="*,Auto">
+                                                        <Button Grid.Column="0" Click="PlaylistPlay_Click"
+                                                                Tag="{Binding}" Padding="0"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Left"
+                                                                Background="Transparent" BorderThickness="0"
+                                                                Cursor="Hand">
+                                                            <TextBlock Text="{Binding Title}" FontSize="13"
+                                                                       Foreground="{StaticResource TextPrimary}"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                        </Button>
+                                                        <Button Grid.Column="1" Content="✕" FontSize="11"
+                                                                Foreground="{StaticResource TextMuted}"
+                                                                Background="Transparent" BorderThickness="0"
+                                                                Click="PlaylistRemove_Click" Tag="{Binding}"
+                                                                Width="24" Height="24" Padding="0"/>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                            <Button Content="清空列表" Click="ClearPlaylist_Click"
+                                    IsEnabled="{Binding HasItems}"
+                                    Theme="{StaticResource GlassSecondaryButton}"
+                                    HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <StackPanel Spacing="8">
+                    <CheckBox Content="显示诊断信息" IsChecked="{Binding ShowDiagnostics}"
+                              Foreground="{StaticResource TextMuted}" FontSize="12"/>
+                    <Border Classes="GlassPanel" IsVisible="{Binding ShowDiagnostics}" Padding="16,12">
+                        <TextBlock Text="{Binding CaptureInfo}" FontSize="11"
+                                   Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
+                                   FontFamily="Consolas, Cascadia Code, Courier New"/>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border IsVisible="{Binding HelpVisible}" Background="#CC0A0F1A" ZIndex="10">
+            <Border Classes="GlassPanel" Width="520" MaxHeight="520"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="28">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,16">
+                        <TextBlock Text="使用帮助" FontSize="20" FontWeight="Bold"
+                                   Foreground="{StaticResource TextPrimary}"/>
+                        <Button Content="关闭" DockPanel.Dock="Right" HorizontalAlignment="Right"
+                                Theme="{StaticResource GlassSecondaryButton}"
+                                Click="CloseHelp_Click"/>
+                    </DockPanel>
+                    <ScrollViewer>
+                        <TextBlock Text="{Binding HelpText}" FontSize="13" LineHeight="22"
+                                   Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Border>
+    </Panel>
+</Window>
