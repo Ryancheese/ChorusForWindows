@@ -1,6 +1,10 @@
+using System;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Chorus.Host.ViewModels;
 
 namespace Chorus.Host;
@@ -18,6 +22,7 @@ public partial class App : Application
         {
             var vm = new HostViewModel();
             var window = new MainWindow { DataContext = vm };
+            window.Icon = LoadAppIcon();
             desktop.MainWindow = window;
 
             // 窗口关闭时清理（双重保险）
@@ -32,5 +37,19 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static WindowIcon? LoadAppIcon()
+    {
+        try
+        {
+            var uri = new Uri("avares://Chorus.Host/Assets/chorus-host.png");
+            using var stream = AssetLoader.Open(uri);
+            return new WindowIcon(new Bitmap(stream));
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
