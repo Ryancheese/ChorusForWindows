@@ -32,15 +32,18 @@ ChorusNet/
 仓库已配置自动打 Windows 安装包（自包含，无需单独装 .NET）：
 
 1. 在 GitHub 打开 [Actions → Windows Installer](https://github.com/Ryancheese/ChorusForWindows/actions/workflows/windows-installer.yml)
-2. 点 **Run workflow**（可填版本号，如 `0.1.0`），完成后在该次运行的 **Artifacts** 下载 `ChorusHost-Setup-*.exe`
-3. 或推送标签发正式版：
+2. 点 **Run workflow**（可填版本号，如 `1.0.0`）
+3. 完成后去 [Releases](https://github.com/Ryancheese/ChorusForWindows/releases) 下载 **`ChorusHost-Setup-*.exe`**（可直接安装）
+
+说明：Actions 页面里的 Artifacts 会被 GitHub **再打成 zip**，那是平台行为；请从 Releases 下 `.exe`，不要下 Artifacts 那个压缩包（除非你愿意解压后再装）。
+
+也可推送标签触发：
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-安装包会出现在 [Releases](https://github.com/Ryancheese/ChorusForWindows/releases)。
 
 本地也可同样流程：`dotnet publish` 自包含输出后，用 [Inno Setup](https://jrsoftware.org/isinfo.php) 编译 `installer/ChorusHost.iss`。
 
