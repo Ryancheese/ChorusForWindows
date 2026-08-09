@@ -152,6 +152,9 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
     public bool IsLive => _controller.CurrentPhase is HostSessionController.Phase.Playing
         or HostSessionController.Phase.Ready
         or HostSessionController.Phase.SyncingClock;
+
+    /// <summary>Peek+decay audio envelope for reactive glass (once per UI frame).</summary>
+    public float TakeAudioLevel() => _controller.TakeAudioLevel();
     public bool IsDark
     {
         get => _isDark;

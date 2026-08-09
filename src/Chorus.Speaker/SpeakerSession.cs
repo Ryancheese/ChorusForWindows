@@ -58,6 +58,7 @@ public sealed class SpeakerSession : IDisposable
     private long _bytesReceived;
     private long _bytesEnqueued;
     private float _peakSample;
+    private float _audioLevel;
 
     public SpeakerPhase Phase { get; private set; } = SpeakerPhase.Idle;
     public string Status { get; private set; } = "未广播";
@@ -69,6 +70,14 @@ public sealed class SpeakerSession : IDisposable
     public double? RTT { get; private set; }
     public string? ErrorMessage { get; private set; }
     public event Action? StateChanged;
+
+    /// <summary>Snapshot then decay the 0–1 peak envelope (once per UI frame).</summary>
+    public float TakeAudioLevel(float decay = 0.90f)
+    {
+        var v = Volatile.Read(ref _audioLevel);
+        Volatile.Write(ref _audioLevel, v * decay);
+        return Math.Clamp(v, 0f, 1f);
+    }
 
     public SpeakerSession()
     {
@@ -447,6 +456,8 @@ public sealed class SpeakerSession : IDisposable
             if (a > peak) peak = a;
         }
         if (peak > _peakSample) _peakSample = peak;
+        var env = Math.Max(peak, Volatile.Read(ref _audioLevel) * 0.82f);
+        Volatile.Write(ref _audioLevel, env);
 
         bool becamePlaying = false;
         lock (_playbackLock)
@@ -546,6 +557,7 @@ public sealed class SpeakerSession : IDisposable
             _bytesReceived = 0;
             _bytesEnqueued = 0;
             _peakSample = 0;
+            Volatile.Write(ref _audioLevel, 0);
         }
     }
 

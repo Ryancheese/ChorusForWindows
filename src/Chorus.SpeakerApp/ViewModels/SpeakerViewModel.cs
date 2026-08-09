@@ -31,6 +31,10 @@ public sealed class SpeakerViewModel : INotifyPropertyChanged, IDisposable
     public bool IsPlaying { get; private set; }
     /// <summary>Orb pulse intensifies while advertising or playing.</summary>
     public bool IsLive => IsAdvertising || IsPlaying;
+
+    /// <summary>Peek+decay audio envelope for reactive glass (once per UI frame).</summary>
+    public float TakeAudioLevel() => _session.TakeAudioLevel();
+
     public bool HasHost => !string.IsNullOrEmpty(HostName);
     public bool HasLocalAddress => !string.IsNullOrEmpty(LocalAddress);
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);

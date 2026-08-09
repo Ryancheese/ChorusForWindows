@@ -57,6 +57,8 @@ public sealed class HostSessionController : IDisposable
     private Task? _sendTask;
     private volatile bool _sending;
     private float _maxSample;
+    /// <summary>Smoothed 0–1 peak envelope for UI audio-reactive glass.</summary>
+    private float _audioLevel;
     private Action<ReadOnlyMemory<float>>? _samplesHandler;
     private ulong _liveSampleIndex;
     private volatile bool _paused;
@@ -82,6 +84,16 @@ public sealed class HostSessionController : IDisposable
     public string CurrentSource { get; private set; } = "未播放";
     public bool IsPaused => _paused;
     public bool IsStreamingSystemAudio => _streamingSystemAudio;
+
+    /// <summary>
+    /// Snapshot then decay the 0–1 peak envelope (call once per UI frame).
+    /// </summary>
+    public float TakeAudioLevel(float decay = 0.90f)
+    {
+        var v = Volatile.Read(ref _audioLevel);
+        Volatile.Write(ref _audioLevel, v * decay);
+        return Math.Clamp(v, 0f, 1f);
+    }
     public bool MuteLocalOutput { get => _muteLocal; set => _muteLocal = value; }
     public Playlist Playlist { get; } = new();
 
@@ -612,6 +624,7 @@ public sealed class HostSessionController : IDisposable
         _liveSequence = 0;
         _liveSampleIndex = 0;
         _maxSample = 0;
+        Volatile.Write(ref _audioLevel, 0);
         _sendQueue.Clear();
         CurrentSource = title;
 
@@ -693,6 +706,7 @@ public sealed class HostSessionController : IDisposable
         _liveSequence = 0;
         _liveSampleIndex = 0;
         _maxSample = 0;
+        Volatile.Write(ref _audioLevel, 0);
         _sendQueue.Clear();
 
         // Match Mac: prepare first so iOS can rebuild AVAudioEngine before hostPlayAt is frozen.
@@ -789,6 +803,8 @@ public sealed class HostSessionController : IDisposable
             if (a > peak) peak = a;
         }
         if (peak > _maxSample) _maxSample = peak;
+        var env = Math.Max(peak, Volatile.Read(ref _audioLevel) * 0.82f);
+        Volatile.Write(ref _audioLevel, env);
 
         const int chunkSize = 4096;
         var arr = samples.ToArray();
@@ -956,6 +972,7 @@ public sealed class HostSessionController : IDisposable
         _sessionStartHostPlayAt = 0;
         _liveSequence = 0;
         _liveSampleIndex = 0;
+        Volatile.Write(ref _audioLevel, 0);
 
         if (CurrentPhase == Phase.Playing)
         {
