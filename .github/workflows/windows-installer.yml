@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Installer version (e.g. 0.1.0). Leave empty to use tag or 0.1.0."
+        description: "Installer version (e.g. 1.0.0). Leave empty to use tag or 0.1.0."
         required: false
         default: ""
 
@@ -17,7 +17,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -40,59 +40,56 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Publish self-contained Host
+      - name: Publish Host + Speaker (self-contained)
         shell: pwsh
         run: |
-          $out = "artifacts/publish"
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          New-Item -ItemType Directory -Force -Path artifacts/publish, artifacts/publish-speaker | Out-Null
           dotnet publish src/Chorus.Host/Chorus.Host.csproj `
-            -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=false `
-            -p:DebugType=None `
-            -p:DebugSymbols=false `
-            -o $out
-          if (-not (Test-Path "$out/Chorus.Host.exe")) {
-            throw "Publish failed: Chorus.Host.exe missing"
-          }
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false `
+            -o artifacts/publish
+          if (-not (Test-Path "artifacts/publish/Chorus.Host.exe")) { throw "Host publish failed" }
+
+          dotnet publish src/Chorus.SpeakerApp/Chorus.SpeakerApp.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false `
+            -o artifacts/publish-speaker
+          if (-not (Test-Path "artifacts/publish-speaker/Chorus.SpeakerApp.exe")) { throw "Speaker publish failed" }
 
       - name: Install Inno Setup
         shell: pwsh
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            choco install innosetup -y --no-progress
-          }
-          if (-not (Test-Path $iscc)) {
-            throw "Inno Setup ISCC.exe not found"
-          }
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup ISCC.exe not found" }
 
-      - name: Build installer
+      - name: Build installers
         shell: pwsh
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           & $iscc "/DMyAppVersion=${{ steps.ver.outputs.version }}" "installer\ChorusHost.iss"
-          $setup = Get-ChildItem "artifacts\installer\ChorusHost-Setup-*.exe" | Select-Object -First 1
-          if (-not $setup) { throw "Installer exe not produced" }
-          Write-Host "Built $($setup.FullName) ($([math]::Round($setup.Length/1MB,1)) MB)"
+          & $iscc "/DMyAppVersion=${{ steps.ver.outputs.version }}" "installer\ChorusSpeaker.iss"
+          Get-ChildItem "artifacts\installer\*.exe" | ForEach-Object {
+            Write-Host "Built $($_.Name) ($([math]::Round($_.Length/1MB,1)) MB)"
+          }
 
-      - name: Upload workflow artifact
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ChorusHost-Setup-${{ steps.ver.outputs.version }}
-          path: artifacts/installer/ChorusHost-Setup-*.exe
+          name: Chorus-Windows-Setup-${{ steps.ver.outputs.version }}
+          path: |
+            artifacts/installer/ChorusHost-Setup-*.exe
+            artifacts/installer/ChorusSpeaker-Setup-*.exe
           if-no-files-found: error
 
-      # Always publish a Release asset (.exe direct download).
-      # Note: Actions "Artifacts" downloads are always wrapped in a ZIP by GitHub;
-      # use the Release page to get ChorusHost-Setup-*.exe directly.
-      - name: Publish installer to GitHub Release
+      - name: Publish installers to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}
-          name: Chorus Host ${{ steps.ver.outputs.version }}
-          files: artifacts/installer/ChorusHost-Setup-*.exe
+          name: Chorus Windows ${{ steps.ver.outputs.version }}
+          files: |
+            artifacts/installer/ChorusHost-Setup-*.exe
+            artifacts/installer/ChorusSpeaker-Setup-*.exe
           fail_on_unmatched_files: true
           generate_release_notes: true
           make_latest: true

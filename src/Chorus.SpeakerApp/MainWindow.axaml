@@ -1,0 +1,120 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Chorus.SpeakerApp.ViewModels"
+        mc:Ignorable="d" xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        x:Class="Chorus.SpeakerApp.MainWindow"
+        x:DataType="vm:SpeakerViewModel"
+        Title="Chorus Speaker"
+        Width="480" Height="640"
+        MinWidth="420" MinHeight="560"
+        WindowStartupLocation="CenterScreen"
+        Background="#0A0F1A">
+
+    <Window.Styles>
+        <Style Selector="Border.GlassCard">
+            <Setter Property="Background" Value="#99141C2B"/>
+            <Setter Property="BorderBrush" Value="#55FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="28"/>
+            <Setter Property="Padding" Value="24,28"/>
+        </Style>
+        <Style Selector="Border.Chip">
+            <Setter Property="Background" Value="#1AFFFFFF"/>
+            <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="999"/>
+            <Setter Property="Padding" Value="14,10"/>
+        </Style>
+        <Style Selector="Button.Primary">
+            <Setter Property="Background" Value="#2E85DC"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="20,14"/>
+            <Setter Property="CornerRadius" Value="50"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel HorizontalAlignment="Center" Spacing="6" Margin="0,12,0,0">
+            <Border Width="74" Height="74" CornerRadius="37"
+                    Background="#14FFFFFF" BorderBrush="#66FFFFFF" BorderThickness="1"
+                    HorizontalAlignment="Center">
+                <TextBlock Text="♪" FontSize="34" Foreground="#59B8EB"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <TextBlock Text="{Binding Title}" FontSize="34" FontWeight="Bold"
+                       Foreground="#F1F5F9" HorizontalAlignment="Center"/>
+            <TextBlock Text="{Binding Subtitle}" FontSize="16" FontWeight="Medium"
+                       Foreground="#8AA0B8" HorizontalAlignment="Center"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" Classes="GlassCard" VerticalAlignment="Center" Margin="0,28">
+            <StackPanel Spacing="12" HorizontalAlignment="Center">
+                <TextBlock Text="{Binding PhaseLabel}" FontSize="22" FontWeight="SemiBold"
+                           Foreground="White" HorizontalAlignment="Center"/>
+                <TextBlock Text="{Binding Status}" FontSize="14"
+                           Foreground="#8AA0B8" TextWrapping="Wrap"
+                           TextAlignment="Center" MaxWidth="320"
+                           HorizontalAlignment="Center"/>
+
+                <StackPanel Orientation="Horizontal" Spacing="12"
+                            HorizontalAlignment="Center" Margin="0,8,0,0"
+                            IsVisible="{Binding HasHost}">
+                    <Border Classes="Chip">
+                        <StackPanel HorizontalAlignment="Center" Spacing="2">
+                            <TextBlock Text="主机" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#8AA0B8" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding HostName}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="White" MaxWidth="160" TextTrimming="CharacterEllipsis"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Classes="Chip">
+                        <StackPanel HorizontalAlignment="Center" Spacing="2">
+                            <TextBlock Text="时钟" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#8AA0B8" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding ClockLabel}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="White" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Spacing="4" Margin="0,8,0,0"
+                            IsVisible="{Binding HasLocalAddress}"
+                            HorizontalAlignment="Center">
+                    <TextBlock Text="本机地址" FontSize="11" FontWeight="SemiBold"
+                               Foreground="#6B7C90" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding LocalAddress}" FontSize="16" FontWeight="SemiBold"
+                               Foreground="#59B8EB" HorizontalAlignment="Center"/>
+                    <TextBlock Text="企业网若无法发现，请在 Host 手动连接此地址"
+                               FontSize="12" Foreground="#6B7C90"
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="280"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding ErrorMessage}" FontSize="13"
+                           Foreground="#FF8A80" TextWrapping="Wrap"
+                           TextAlignment="Center" MaxWidth="320"
+                           IsVisible="{Binding HasError}" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Grid.Row="2" Text="{Binding Hint}" FontSize="12"
+                   Foreground="#6B7C90" TextWrapping="Wrap"
+                   TextAlignment="Center" Margin="8,0,8,16"/>
+
+        <Button Grid.Row="3" Classes="Primary"
+                Content="{Binding PrimaryActionLabel}"
+                Click="Toggle_Click"/>
+    </Grid>
+</Window>

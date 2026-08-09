@@ -34,7 +34,22 @@ public sealed record DeviceInfo(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("role")] DeviceRole Role,
-    [property: JsonPropertyName("protocolVersion")] ushort ProtocolVersion = SyncProtocol.Version);
+    [property: JsonPropertyName("protocolVersion")] ushort ProtocolVersion = SyncProtocol.Version,
+    /// <summary>Optional platform hint: ios / android / windows / macos.</summary>
+    [property: JsonPropertyName("platform")] string? Platform = null)
+{
+    /// <summary>Short label for Host UI (not serialized).</summary>
+    [JsonIgnore]
+    public string PlatformLabel => Platform?.Trim().ToLowerInvariant() switch
+    {
+        "ios" => "iPhone",
+        "ipados" => "iPad",
+        "android" => "Android",
+        "windows" => "Windows",
+        "macos" or "mac" => "Mac",
+        _ => Role == DeviceRole.Host ? "Host" : "Speaker",
+    };
+}
 
 /// <summary>Host -> Speaker clock probe.</summary>
 public sealed record ClockPingData(
