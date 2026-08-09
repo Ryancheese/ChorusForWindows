@@ -91,7 +91,8 @@ public sealed class HostSessionController : IDisposable
         _localDevice = new DeviceInfo(
             Guid.NewGuid().ToString(),
             deviceName ?? Environment.MachineName,
-            DeviceRole.Host);
+            DeviceRole.Host,
+            Platform: "windows");
         _mdnsBrowser = new MdnsBrowser();
         _mdnsBrowser.PeersChanged += () => StateChanged?.Invoke();
         _mdnsBrowser.ErrorOccurred += err => { LastError = $"mDNS 浏览器: {err}"; StateChanged?.Invoke(); };

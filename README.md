@@ -20,11 +20,14 @@
 ```
 ChorusNet/
 ├── ChorusNet.slnx
+├── installer/            # Inno Setup（Host + Speaker）
 └── src/
-    ├── ChorusCore/       # 协议 / 网络 / mDNS / 时钟
-    ├── ChorusAudio/      # WASAPI / 文件 / 测试音 / 本机播放
-    ├── Chorus.Host/      # Avalonia Host
-    └── Chorus.Speaker/   # 控制台 Speaker（联调）
+    ├── ChorusCore/            # 协议 / 网络 / mDNS / 时钟
+    ├── ChorusAudio/           # WASAPI / 文件 / 测试音 / 本机播放
+    ├── Chorus.Host/           # Avalonia Host
+    ├── Chorus.Speaker/        # Speaker 会话库
+    ├── Chorus.SpeakerApp/     # Avalonia GUI Speaker
+    └── Chorus.Speaker.Console/# 控制台 Speaker（联调）
 ```
 
 ## 安装包（GitHub Actions）
@@ -33,9 +36,11 @@ ChorusNet/
 
 1. 在 GitHub 打开 [Actions → Windows Installer](https://github.com/Ryancheese/ChorusForWindows/actions/workflows/windows-installer.yml)
 2. 点 **Run workflow**（可填版本号，如 `1.0.0`）
-3. 完成后去 [Releases](https://github.com/Ryancheese/ChorusForWindows/releases) 下载 **`ChorusHost-Setup-*.exe`**（可直接安装）
+3. 完成后去 [Releases](https://github.com/Ryancheese/ChorusForWindows/releases) 下载：
+   - **`ChorusHost-Setup-*.exe`**（主机）
+   - **`ChorusSpeaker-Setup-*.exe`**（扬声器 / 电脑当 Speaker）
 
-说明：Actions 页面里的 Artifacts 会被 GitHub **再打成 zip**，那是平台行为；请从 Releases 下 `.exe`，不要下 Artifacts 那个压缩包（除非你愿意解压后再装）。
+说明：Actions 页面里的 Artifacts 会被 GitHub **再打成 zip**；请从 Releases 下 `.exe`。
 
 也可推送标签触发：
 
@@ -44,24 +49,24 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-
-本地也可同样流程：`dotnet publish` 自包含输出后，用 [Inno Setup](https://jrsoftware.org/isinfo.php) 编译 `installer/ChorusHost.iss`。
+本地：`dotnet publish` 后用 Inno Setup 编译 `installer/ChorusHost.iss` / `installer/ChorusSpeaker.iss`。
 
 ## 编译运行
 
 需要 [.NET 8 SDK](https://dotnet.microsoft.com/download)。
 
 ```bash
-dotnet build src/Chorus.Host/Chorus.Host.csproj
 dotnet run --project src/Chorus.Host/Chorus.Host.csproj
+dotnet run --project src/Chorus.SpeakerApp/Chorus.SpeakerApp.csproj
 ```
 
-
-联调 Speaker：
+控制台联调 Speaker：
 
 ```bash
-dotnet run --project src/Chorus.Speaker/Chorus.Speaker.csproj
+dotnet run --project src/Chorus.Speaker.Console/Chorus.Speaker.Console.csproj
 ```
+
+**注意：** 同一台电脑不要同时开 Host 与 Speaker（都占用 `17482`）。
 
 ## 使用流程
 

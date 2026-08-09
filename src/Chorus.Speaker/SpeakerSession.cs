@@ -8,9 +8,18 @@ using ChorusCore.Sync;
 
 namespace Chorus.Speaker;
 
+public enum SpeakerPhase
+{
+    Idle,
+    Advertising,
+    Connected,
+    Ready,
+    Playing,
+    Error,
+}
+
 /// <summary>
-/// Speaker-side session for testing the Windows Host. Accepts dual TCP (control + audio)
-/// like iOS Speaker: PCM is only handled on the connection that sent <c>audioChannelHello</c>.
+/// Speaker-side session. Accepts dual TCP (control + audio) like iOS Speaker.
 /// Falls back to single-TCP multiplex for older hosts.
 /// </summary>
 public sealed class SpeakerSession : IDisposable
@@ -19,18 +28,19 @@ public sealed class SpeakerSession : IDisposable
     private SyncConnection? _control;
     private SyncConnection? _audio;
     private double _clockOffset;
+    private bool _clockCalibrated;
     private AudioJitterBuffer? _jitter;
     private LocalAudioPlayer? _player;
     private Guid? _sessionId;
     private double _sessionSampleRate = SyncProtocol.SampleRate;
     private double _hostPlayAt;
     private volatile bool _playStarted;
-    private Thread? _scheduleThread;
     private volatile bool _disposed;
 
     private MdnsAdvertiser? _advertiser;
     private HostListener? _listener;
     private volatile bool _isAdvertisingMode;
+    private ushort _advertisePort = SyncBonjour.ControlPort;
 
     private string? _host;
     private ushort _port;
@@ -44,8 +54,15 @@ public sealed class SpeakerSession : IDisposable
     private long _bytesEnqueued;
     private float _peakSample;
 
-    public string Status { get; private set; } = "未连接";
+    public SpeakerPhase Phase { get; private set; } = SpeakerPhase.Idle;
+    public string Status { get; private set; } = "未广播";
+    public string? LocalAddress { get; private set; }
+    public ushort? ListeningPort { get; private set; }
+    public string? HostName { get; private set; }
+    public bool IsClockCalibrated => _clockCalibrated;
+    public bool IsAdvertising => _isAdvertisingMode && Phase != SpeakerPhase.Idle && Phase != SpeakerPhase.Error;
     public double? RTT { get; private set; }
+    public string? ErrorMessage { get; private set; }
     public event Action? StateChanged;
 
     public SpeakerSession()
@@ -53,18 +70,53 @@ public sealed class SpeakerSession : IDisposable
         _localDevice = new DeviceInfo(
             Guid.NewGuid().ToString(),
             Environment.MachineName + "-Speaker",
-            DeviceRole.Speaker);
+            DeviceRole.Speaker,
+            Platform: "windows");
     }
 
     public void StartAdvertising(ushort port = SyncBonjour.ControlPort)
     {
-        _isAdvertisingMode = true;
-        _port = port;
-        _listener = new HostListener();
-        _listener.ConnectionAccepted += OnInboundConnection;
-        _listener.Start(port);
+        ThrowIfDisposed();
+        StopAdvertisingInternal(restart: false);
 
-        var ip = LocalAddress.PrimaryIPv4();
+        _isAdvertisingMode = true;
+        _advertisePort = port;
+        _reconnectAttempts = 0;
+        ErrorMessage = null;
+
+        try
+        {
+            _listener = new HostListener();
+            _listener.ConnectionAccepted += OnInboundConnection;
+            _listener.Start(port);
+        }
+        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+        {
+            _listener = null;
+            _isAdvertisingMode = false;
+            Phase = SpeakerPhase.Error;
+            ErrorMessage = $"端口 {port} 已被占用。请先关闭本机 Chorus Host / 其他 Speaker，再重试。";
+            Status = ErrorMessage;
+            Log(Status);
+            StateChanged?.Invoke();
+            return;
+        }
+        catch (Exception ex)
+        {
+            _listener = null;
+            _isAdvertisingMode = false;
+            Phase = SpeakerPhase.Error;
+            ErrorMessage = $"无法开始广播：{ex.Message}";
+            Status = ErrorMessage;
+            Log(Status);
+            StateChanged?.Invoke();
+            return;
+        }
+
+        ListeningPort = _listener.ListeningPort;
+        var ip = ChorusCore.Network.LocalAddress.PrimaryIPv4();
+        LocalAddress = string.IsNullOrEmpty(ip) ? null : $"{ip}:{ListeningPort}";
+
         if (!string.IsNullOrEmpty(ip) && System.Net.IPAddress.TryParse(ip, out var addr))
         {
             var instance = $"Chorus-Speaker-{Environment.MachineName}";
@@ -73,9 +125,44 @@ public sealed class SpeakerSession : IDisposable
             _advertiser.Start();
         }
 
-        Status = $"正在广播… 本机 {ip}:{_listener.ListeningPort}，等 Host 连入";
+        Phase = SpeakerPhase.Advertising;
+        Status = LocalAddress != null
+            ? $"正在广播… 本机 {LocalAddress}，等待 Host 连接"
+            : $"正在广播… 端口 {ListeningPort}（未检测到局域网 IP）";
         Log(Status);
         StateChanged?.Invoke();
+    }
+
+    public void StopAdvertising()
+    {
+        if (_disposed) return;
+        StopAdvertisingInternal(restart: false);
+        Phase = SpeakerPhase.Idle;
+        Status = "已停止广播";
+        ErrorMessage = null;
+        HostName = null;
+        LocalAddress = null;
+        ListeningPort = null;
+        _clockCalibrated = false;
+        StateChanged?.Invoke();
+    }
+
+    private void StopAdvertisingInternal(bool restart)
+    {
+        _isAdvertisingMode = restart;
+        StopPlaying();
+        try { _advertiser?.Dispose(); } catch { }
+        try { _listener?.Dispose(); } catch { }
+        try { _audio?.Dispose(); } catch { }
+        try { _control?.Dispose(); } catch { }
+        _advertiser = null;
+        _listener = null;
+        _audio = null;
+        _control = null;
+        _sessionId = null;
+        _clockOffset = 0;
+        _clockCalibrated = false;
+        HostName = null;
     }
 
     private void OnInboundConnection(SyncConnection conn)
@@ -84,6 +171,7 @@ public sealed class SpeakerSession : IDisposable
         {
             _control = conn;
             conn.Start(evt => HandleControlEvent(evt, conn));
+            Phase = SpeakerPhase.Connected;
             Status = "Host 控制通道已连入，握手中…";
             Log(Status);
             StateChanged?.Invoke();
@@ -92,7 +180,6 @@ public sealed class SpeakerSession : IDisposable
 
         if (_audio == null)
         {
-            // Provisional audio socket — confirmed by audioChannelHello.
             _audio = conn;
             conn.Start(evt => HandleAudioEvent(evt, conn));
             Log("第二条 TCP 已连入（待 audioChannelHello）");
@@ -105,21 +192,24 @@ public sealed class SpeakerSession : IDisposable
 
     public void Connect(string host, ushort port = SyncBonjour.ControlPort)
     {
+        ThrowIfDisposed();
+        StopAdvertisingInternal(restart: false);
         _isAdvertisingMode = false;
         _host = host;
         _port = port;
+        ErrorMessage = null;
         ConnectInternal(host, port);
     }
 
     private void ConnectInternal(string host, ushort port)
     {
-        // Legacy single-TCP dial to Host (multiplexed). Prefer advertising + Host dialing in.
         var client = new TcpClient();
         client.Connect(host, port);
         _control = new SyncConnection(client, $"{host}:{port}");
         _audio = null;
         var current = _control;
         _control.Start(evt => HandleControlEvent(evt, current));
+        Phase = SpeakerPhase.Connected;
         Status = "已连接，握手中…";
         Log(Status);
         StateChanged?.Invoke();
@@ -134,15 +224,12 @@ public sealed class SpeakerSession : IDisposable
         switch (evt)
         {
             case SyncConnectionEvent.Connected:
-                // When we dial the Host, announce ourselves. When Host dials us,
-                // wait for their Hello and reply with Welcome (iOS Speaker behavior).
                 if (!_isAdvertisingMode)
                     _control!.SendControl(new ControlPayload.Hello(_localDevice));
                 break;
             case SyncConnectionEvent.Control c:
                 if (c.Payload is ControlPayload.AudioChannelHello)
                 {
-                    // Host mistakenly sent hello on control — treat control as audio too (compat).
                     _audio ??= conn;
                     Log("在控制通道收到 audioChannelHello（单连接兼容）");
                     break;
@@ -150,7 +237,6 @@ public sealed class SpeakerSession : IDisposable
                 HandleControl(c.Payload);
                 break;
             case SyncConnectionEvent.Audio a:
-                // Legacy multiplex: audio on control when no dedicated audio channel.
                 if (_audio == null || ReferenceEquals(_audio, conn))
                     HandleAudio(a.Header, a.Pcm);
                 break;
@@ -167,17 +253,17 @@ public sealed class SpeakerSession : IDisposable
         switch (evt)
         {
             case SyncConnectionEvent.Control c when c.Payload is ControlPayload.AudioChannelHello:
-                Log($"音频通道已确认（audioChannelHello）");
-                Status = "双通道已就绪";
+                Log("音频通道已确认（audioChannelHello）");
+                Phase = SpeakerPhase.Ready;
+                Status = HostName != null ? $"已连接 {HostName}" : "双通道已就绪";
                 StateChanged?.Invoke();
                 break;
             case SyncConnectionEvent.Audio a:
                 HandleAudio(a.Header, a.Pcm);
                 break;
-            case SyncConnectionEvent.Disconnected d:
-                Log($"音频通道断开：{d.Reason ?? "未知"}");
+            case SyncConnectionEvent.Disconnected:
+                Log("音频通道断开");
                 _audio = null;
-                // Tear down control as well — matches iOS pairing semantics.
                 var control = _control;
                 _control = null;
                 try { control?.Dispose(); } catch { }
@@ -203,6 +289,8 @@ public sealed class SpeakerSession : IDisposable
 
     private void OnSessionLost(string? reason)
     {
+        HostName = null;
+        _clockCalibrated = false;
         Status = $"断开：{reason ?? "未知"}";
         Log(Status);
         StateChanged?.Invoke();
@@ -217,10 +305,11 @@ public sealed class SpeakerSession : IDisposable
             _advertiser = null;
             _listener = null;
             Thread.Sleep(1000);
-            if (!_disposed) StartAdvertising(_port);
+            if (!_disposed) StartAdvertising(_advertisePort);
         }
         else
         {
+            Phase = SpeakerPhase.Error;
             TryReconnect();
         }
     }
@@ -230,14 +319,17 @@ public sealed class SpeakerSession : IDisposable
         switch (payload)
         {
             case ControlPayload.Welcome w:
+                HostName = w.Info.Name;
+                Phase = SpeakerPhase.Connected;
                 Status = $"收到 Host：{w.Info.Name}";
                 Log(Status);
                 StateChanged?.Invoke();
                 break;
 
             case ControlPayload.Hello h:
-                // Host sent Hello — reply Welcome (Host-initiated connect).
                 _control?.SendControl(new ControlPayload.Welcome(_localDevice));
+                HostName = h.Info.Name;
+                Phase = SpeakerPhase.Connected;
                 Status = $"收到 Host：{h.Info.Name}";
                 Log(Status);
                 StateChanged?.Invoke();
@@ -252,22 +344,31 @@ public sealed class SpeakerSession : IDisposable
 
             case ControlPayload.ClockOffset co:
                 _clockOffset = co.Seconds;
+                _clockCalibrated = true;
                 Log($"时钟偏移更新：{co.Seconds:F3}s");
+                if (Phase is SpeakerPhase.Connected or SpeakerPhase.Ready)
+                {
+                    Phase = SpeakerPhase.Ready;
+                    Status = HostName != null ? $"已连接 {HostName}" : "时钟已校准";
+                    StateChanged?.Invoke();
+                }
                 break;
 
             case ControlPayload.PrepareSession ps:
                 _sessionId = ps.Session.SessionId;
                 _sessionSampleRate = ps.Session.SampleRate;
                 _jitter = new AudioJitterBuffer(_sessionSampleRate);
-                Status = $"准备会话：{ps.Session.Title}（{_sessionSampleRate} Hz）";
+                Phase = SpeakerPhase.Ready;
+                Status = $"准备会话：{ps.Session.Title}";
                 Log(Status);
                 StateChanged?.Invoke();
                 break;
 
             case ControlPayload.StartPlayback sp:
                 _hostPlayAt = sp.Start.HostPlayAt;
-                Log($"StartPlayback hostPlayAt={_hostPlayAt:F2} offset={_clockOffset:F3} leadTime={sp.Start.LeadTime:F2}");
+                Log($"StartPlayback hostPlayAt={_hostPlayAt:F2} offset={_clockOffset:F3}");
                 StartPlaying();
+                Phase = SpeakerPhase.Playing;
                 Status = "播放中";
                 Log(Status);
                 StateChanged?.Invoke();
@@ -275,7 +376,8 @@ public sealed class SpeakerSession : IDisposable
 
             case ControlPayload.StopPlayback:
                 StopPlaying();
-                Status = "已停止";
+                Phase = SpeakerPhase.Ready;
+                Status = HostName != null ? $"已连接 {HostName}" : "已停止";
                 Log(Status);
                 StateChanged?.Invoke();
                 _control?.SendControl(new ControlPayload.StopAcknowledged(_sessionId ?? Guid.Empty));
@@ -316,7 +418,7 @@ public sealed class SpeakerSession : IDisposable
 
         if (_framesReceived % 500 == 1)
         {
-            Log($"已收 {_framesReceived} 帧 / {_bytesReceived / 1024} KB，已喂播放器 {_bytesEnqueued / 1024} KB，本帧peak={peak:F4} 累计peak={_peakSample:F4} playStarted={_playStarted}");
+            Log($"已收 {_framesReceived} 帧 / {_bytesReceived / 1024} KB，已喂播放器 {_bytesEnqueued / 1024} KB，playStarted={_playStarted}");
         }
     }
 
@@ -324,30 +426,12 @@ public sealed class SpeakerSession : IDisposable
     {
         StopPlaying();
         _player = new LocalAudioPlayer(_sessionSampleRate, 1);
-        _player.Start();
-        _playStarted = false;
-
-        _scheduleThread = new Thread(() =>
-        {
-            try
-            {
-                double localPlayAt = _hostPlayAt + _clockOffset;
-                double wait = localPlayAt - HostTime.Now();
-                if (wait > 0 && wait < 3)
-                {
-                    Log($"等待起播 {wait:F2}s 后开始喂播放器");
-                    Thread.Sleep((int)(wait * 1000));
-                }
-                else if (wait >= 3)
-                {
-                    Log($"wait={wait:F2}s 过大，跳过等待立即起播（时钟可能未校准）");
-                }
-                _playStarted = true;
-                Log("起播：playStarted=true，后续音频将喂给播放器");
-            }
-            catch (Exception ex) { Log($"调度线程异常：{ex.Message}"); }
-        }) { IsBackground = true, Name = "speaker-schedule" };
-        _scheduleThread.Start();
+        // Align engine start to shared timeline with output latency compensation
+        // (same approach as Host local play), instead of Sleep-gated enqueue.
+        double localPlayAt = _hostPlayAt + _clockOffset;
+        _player.StartAt(localPlayAt);
+        _playStarted = true;
+        Log($"起播 StartAt localPlayAt={localPlayAt:F3} compensation={_player.OutputCompensationSeconds:F3}s");
     }
 
     private void EnqueueForPlayback(byte[] pcm)
@@ -365,6 +449,10 @@ public sealed class SpeakerSession : IDisposable
         try { _player?.Stop(); } catch { }
         _player = null;
         _jitter?.Reset();
+        _framesReceived = 0;
+        _bytesReceived = 0;
+        _bytesEnqueued = 0;
+        _peakSample = 0;
     }
 
     private void TryReconnect()
@@ -375,7 +463,9 @@ public sealed class SpeakerSession : IDisposable
 
         if (_reconnectAttempts >= MaxReconnectAttempts)
         {
-            Status = $"重连失败（已尝试 {MaxReconnectAttempts} 次），按 Enter 退出";
+            Status = $"重连失败（已尝试 {MaxReconnectAttempts} 次）";
+            ErrorMessage = Status;
+            Phase = SpeakerPhase.Error;
             Log(Status);
             StateChanged?.Invoke();
             _reconnecting = false;
@@ -398,6 +488,7 @@ public sealed class SpeakerSession : IDisposable
                 _control = null;
                 _audio = null;
                 _clockOffset = 0;
+                _clockCalibrated = false;
                 _sessionId = null;
                 ConnectInternal(_host, _port);
                 _reconnectAttempts = 0;
@@ -413,14 +504,15 @@ public sealed class SpeakerSession : IDisposable
         reconnectThread.Start();
     }
 
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(SpeakerSession));
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        StopPlaying();
-        try { _advertiser?.Dispose(); } catch { }
-        try { _listener?.Dispose(); } catch { }
-        try { _audio?.Dispose(); } catch { }
-        try { _control?.Dispose(); } catch { }
+        StopAdvertisingInternal(restart: false);
     }
 }

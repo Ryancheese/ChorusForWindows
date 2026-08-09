@@ -489,6 +489,11 @@
                                                                FontSize="14" FontWeight="Bold"/>
                                                     <TextBlock Text="{Binding Name}" FontSize="14"
                                                                Foreground="{DynamicResource TextPrimary}"/>
+                                                    <Border Background="#22FFFFFF" CornerRadius="8" Padding="8,2">
+                                                        <TextBlock Text="{Binding PlatformLabel}" FontSize="11"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource TextMuted}"/>
+                                                    </Border>
                                                     <TextBlock Text="{Binding #Root.((vm:HostViewModel)DataContext).LocReady}"
                                                                FontSize="12"
                                                                Foreground="{DynamicResource TextMuted}"/>
