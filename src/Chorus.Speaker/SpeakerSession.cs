@@ -90,31 +90,50 @@ public sealed class SpeakerSession : IDisposable
         _reconnectAttempts = 0;
         ErrorMessage = null;
 
-        try
+        Exception? lastError = null;
+        for (int attempt = 0; attempt < 6; attempt++)
         {
-            _listener = new HostListener();
-            _listener.ConnectionAccepted += OnInboundConnection;
-            _listener.Start(port);
+            try
+            {
+                // Previous TcpListener can take a beat to fully release on Windows.
+                if (attempt > 0)
+                    Thread.Sleep(150 * attempt);
+
+                var listener = new HostListener();
+                listener.ConnectionAccepted += OnInboundConnection;
+                listener.Start(port);
+                _listener = listener;
+                lastError = null;
+                break;
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+            {
+                lastError = ex;
+                try { _listener?.Dispose(); } catch { }
+                _listener = null;
+                Log($"端口 {port} 暂不可用，重试 {attempt + 1}/6…");
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                try { _listener?.Dispose(); } catch { }
+                _listener = null;
+                break;
+            }
         }
-        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+
+        if (_listener == null)
         {
-            _listener = null;
             _isAdvertisingMode = false;
             Phase = SpeakerPhase.Error;
-            ErrorMessage = $"端口 {port} 已被占用。请先关闭本机 Chorus Host / 其他 Speaker，再重试。";
-            Status = ErrorMessage;
-            Log(Status);
-            StateChanged?.Invoke();
-            return;
-        }
-        catch (Exception ex)
-        {
-            _listener = null;
-            _isAdvertisingMode = false;
-            Phase = SpeakerPhase.Error;
-            ErrorMessage = $"无法开始广播：{ex.Message}";
-            Status = ErrorMessage;
-            Log(Status);
+            ErrorMessage = lastError is SocketException
+                {
+                    SocketErrorCode: SocketError.AddressAlreadyInUse
+                }
+                ? $"端口 {port} 仍被占用。请完全退出本机其他 Chorus 窗口后重试（含后台 Host）。"
+                : $"无法开始广播：{lastError?.Message ?? "未知错误"}";
+            Status = "无法开始广播";
+            Log(ErrorMessage);
             StateChanged?.Invoke();
             return;
         }
@@ -472,7 +491,14 @@ public sealed class SpeakerSession : IDisposable
     private bool ConsumeChunkLocked(AudioJitterBuffer.Chunk chunk)
     {
         if (!_playStarted)
+        {
+            double localPlayAt = chunk.Header.HostPlayAt + _clockOffset;
+            // Drop stale pre-roll so we start on a chunk that still has schedule runway
+            // (dumping already-due PCM makes Windows race ahead / lag vs iPhones).
+            if (localPlayAt < HostTime.Now() + 0.05)
+                return false;
             BeginPlaybackLocked(chunk.Header.HostPlayAt);
+        }
 
         if (!_playStarted || _player == null) return false;
 
@@ -496,9 +522,6 @@ public sealed class SpeakerSession : IDisposable
         TearDownPlayer();
         _player = new LocalAudioPlayer(_sessionSampleRate, 1);
         double localPlayAt = chunkHostPlayAt + _clockOffset;
-        // Hopelessly late: start soon (mild lateness keeps absolute sync).
-        if (localPlayAt < HostTime.Now() - 0.40)
-            localPlayAt = HostTime.Now() + 0.12;
         _player.StartAt(localPlayAt);
         _playStarted = true;
         Log($"起播 StartAt localPlayAt={localPlayAt:F3} chunkHostPlayAt={chunkHostPlayAt:F3} compensation={_player.OutputCompensationSeconds:F3}s");

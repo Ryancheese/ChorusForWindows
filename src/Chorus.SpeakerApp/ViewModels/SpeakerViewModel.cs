@@ -40,9 +40,15 @@ public sealed class SpeakerViewModel : INotifyPropertyChanged, IDisposable
     public void ToggleBroadcast()
     {
         if (IsAdvertising)
+        {
             _session.StopAdvertising();
-        else
-            _session.StartAdvertising();
+            return;
+        }
+
+        // Error / retry path: always tear down before rebinding 17482.
+        if (PhaseLabel == "错误")
+            _session.StopAdvertising();
+        _session.StartAdvertising();
     }
 
     private void OnSessionChanged()
