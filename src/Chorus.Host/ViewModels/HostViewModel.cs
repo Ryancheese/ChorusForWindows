@@ -130,6 +130,8 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
         }
     }
     public bool HasDiscoveredPeers => DiscoveredPeers.Count > 0;
+    public bool CanConnectAll => DiscoveredPeers.Any(r => !r.IsConnected);
+    public string LocConnectAll => L10n.T("action.connect.all");
     public string ManualConnectLabel => IsManualEndpointConnected
         ? L10n.T("action.disconnect")
         : L10n.T("action.connect");
@@ -284,6 +286,7 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
             nameof(LocTagline), nameof(LocHelp), nameof(LocLanguage), nameof(LocAppearance),
             nameof(LocAppearanceSystem), nameof(LocAppearanceLight), nameof(LocAppearanceDark),
             nameof(LocLangSystem), nameof(LocClose), nameof(LocConnect), nameof(LocDisconnect),
+            nameof(LocConnectAll), nameof(CanConnectAll),
             nameof(LocNearby), nameof(LocManual), nameof(LocSession), nameof(LocPlayback),
             nameof(LocPlaylist), nameof(LocPlayLocal), nameof(LocAutoNext), nameof(LocChooseAudio),
             nameof(LocChooseFolder), nameof(LocTestTone), nameof(LocSyncPlay), nameof(LocStop),
@@ -375,11 +378,13 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
                 });
             }
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasDiscoveredPeers)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanConnectAll)));
             return;
         }
 
         foreach (var row in DiscoveredPeers)
             row.IsConnected = _controller.IsConnectedToPeer(row.Peer);
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanConnectAll)));
     }
 
     public void ConnectToPeerRow(PeerRowViewModel row) => ConnectToPeer(row.Peer);
@@ -459,6 +464,32 @@ public sealed class HostViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
         _controller.Connect(peer.IPAddress.ToString(), peer.Port, peer.InstanceName);
+    }
+
+    /// <summary>Connect every discovered peer that is not already linked.</summary>
+    public void ConnectAllPeers()
+    {
+        var pending = DiscoveredPeers.Where(r => !r.IsConnected).Select(r => r.Peer).ToList();
+        if (pending.Count == 0) return;
+
+        Status = L10n.Format("status.connecting.all", pending.Count);
+
+        // Connect off the UI thread — TcpClient.Connect is synchronous.
+        _ = Task.Run(() =>
+        {
+            foreach (var peer in pending)
+            {
+                try
+                {
+                    if (_controller.IsConnectedToPeer(peer)) continue;
+                    _controller.Connect(peer.IPAddress.ToString(), peer.Port, peer.InstanceName);
+                }
+                catch
+                {
+                    // Per-peer errors are surfaced via LastError / StatusText.
+                }
+            }
+        });
     }
 
     public void ManualConnectOrDisconnect()

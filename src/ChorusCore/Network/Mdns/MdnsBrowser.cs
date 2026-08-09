@@ -53,7 +53,11 @@ public sealed class MdnsBrowser : IDisposable
 
     public event Action? PeersChanged;
     public event Action<string>? ErrorOccurred;
-    public TimeSpan PeerTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Drop peers that stop answering queries. Queries run every 5s; ~2–3 misses ≈ gone.
+    /// </summary>
+    public TimeSpan PeerTimeout { get; set; } = TimeSpan.FromSeconds(12);
 
     public void Start()
     {
@@ -149,9 +153,26 @@ public sealed class MdnsBrowser : IDisposable
         var aRecords = new Dictionary<string, IPAddress>(StringComparer.OrdinalIgnoreCase);
         bool changed = false;
 
-        // Pass 1: collect A records (hostname → IPv4).
+        // Pass 0: goodbye (TTL=0) — remove immediately.
         foreach (var rec in all)
         {
+            if (rec.Ttl != 0) continue;
+            if (rec.Type == DnsRecordType.PTR && IsServiceType(rec.Name)
+                && DnsCodec.TryParsePtr(rec.Rdata, data, rec.RdataOffset, out var goneInstance))
+            {
+                if (RemovePeer(NormalizeHost(goneInstance))) changed = true;
+            }
+            else if (rec.Type is DnsRecordType.SRV or DnsRecordType.TXT
+                     && IsChorusInstance(NormalizeHost(rec.Name)))
+            {
+                if (RemovePeer(NormalizeHost(rec.Name))) changed = true;
+            }
+        }
+
+        // Pass 1: collect A records (hostname → IPv4). Skip TTL=0.
+        foreach (var rec in all)
+        {
+            if (rec.Ttl == 0) continue;
             if (rec.Type != DnsRecordType.A || rec.Rdata.Length != 4) continue;
             if ((rec.Class & 0x7FFF) == 0) continue;
             var host = NormalizeHost(rec.Name);
@@ -160,8 +181,10 @@ public sealed class MdnsBrowser : IDisposable
         }
 
         // Pass 2: PTR / SRV → pending keyed by instance FQDN (not service type).
+        // Only SRV (or complete promote) refreshes LastSeen — bare PTR must not keep zombies alive.
         foreach (var rec in all)
         {
+            if (rec.Ttl == 0) continue;
             if ((rec.Class & 0x7FFF) == 0) continue;
             try
             {
@@ -179,7 +202,6 @@ public sealed class MdnsBrowser : IDisposable
                         if (!_pending.TryGetValue(key, out var p))
                             _pending[key] = p = new PendingPeer();
                         if (!string.IsNullOrEmpty(inst)) p.InstanceName = inst;
-                        TouchPeer(key);
                     }
                 }
                 else if (rec.Type == DnsRecordType.SRV)
@@ -221,7 +243,9 @@ public sealed class MdnsBrowser : IDisposable
             catch { /* malformed record — skip */ }
         }
 
-        // Pass 3: promote pending → peers when we have HostName + Port + A.
+        // Pass 3: first-time promote when HostName + Port + A are known.
+        // Existing peers only refresh LastSeen via SRV in pass 2 — incidental A/PTR
+        // must not keep a stopped speaker in the list.
         lock (_lock)
         {
             foreach (var (key, p) in _pending.ToList())
@@ -238,42 +262,39 @@ public sealed class MdnsBrowser : IDisposable
                     Port = p.Port,
                     LastSeen = DateTime.UtcNow,
                 };
-                if (!_peers.TryGetValue(key, out var existing) || !SameEndpoint(existing, next))
-                    changed = true;
-                _peers[key] = next;
-            }
-
-            // Refresh LastSeen / IP for known peers when their A appears again.
-            foreach (var (key, peer) in _peers.ToList())
-            {
-                if (!aRecords.TryGetValue(peer.HostName, out var ip)) continue;
-                var next = new DiscoveredPeer
+                if (!_peers.TryGetValue(key, out var existing))
                 {
-                    InstanceName = peer.InstanceName,
-                    HostName = peer.HostName,
-                    IPAddress = ip,
-                    Port = peer.Port,
-                    LastSeen = DateTime.UtcNow,
-                };
-                if (!peer.IPAddress.Equals(ip)) changed = true;
-                _peers[key] = next;
+                    _peers[key] = next;
+                    changed = true;
+                }
+                else if (!SameEndpoint(existing, next))
+                {
+                    _peers[key] = new DiscoveredPeer
+                    {
+                        InstanceName = next.InstanceName,
+                        HostName = next.HostName,
+                        IPAddress = next.IPAddress,
+                        Port = next.Port,
+                        LastSeen = existing.LastSeen,
+                    };
+                    changed = true;
+                }
             }
         }
 
         if (changed) PeersChanged?.Invoke();
     }
 
-    private void TouchPeer(string key)
+    private bool RemovePeer(string instanceFull)
     {
-        if (!_peers.TryGetValue(key, out var existing)) return;
-        _peers[key] = new DiscoveredPeer
+        if (string.IsNullOrEmpty(instanceFull) || !IsChorusInstance(instanceFull)) return false;
+        var key = instanceFull.ToLowerInvariant();
+        lock (_lock)
         {
-            InstanceName = existing.InstanceName,
-            HostName = existing.HostName,
-            IPAddress = existing.IPAddress,
-            Port = existing.Port,
-            LastSeen = DateTime.UtcNow,
-        };
+            bool removed = _peers.Remove(key);
+            _pending.Remove(key);
+            return removed;
+        }
     }
 
     private static bool SameEndpoint(DiscoveredPeer a, DiscoveredPeer b) =>

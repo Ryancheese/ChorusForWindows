@@ -6,6 +6,7 @@ namespace ChorusCore.Sync;
 /// Holds received PCM briefly so Wi-Fi jitter does not turn into audible gaps.
 /// Reorders out-of-order chunks by sequence number and releases a contiguous run
 /// once enough audio is buffered to start safely. Mirrors the Swift AudioJitterBuffer.
+/// Mid-session joiners anchor to the earliest buffered sequence (not zero).
 /// Not thread-safe — consume from a single playback thread.
 /// </summary>
 public sealed class AudioJitterBuffer
@@ -40,14 +41,20 @@ public sealed class AudioJitterBuffer
     public List<Chunk> Append(AudioChunkHeader header, byte[] pcm)
     {
         var ready = new List<Chunk>();
-        if (_pending.ContainsKey(header.Sequence) || header.Sequence < _nextSequence)
+        if (_pending.ContainsKey(header.Sequence))
+            return ready;
+        if (_started && header.Sequence < _nextSequence)
             return ready;
 
         _pending[header.Sequence] = new Chunk(header, pcm);
         _bufferedSamples += (long)header.SampleCount;
 
         if (!_started)
+        {
             _started = (_bufferedSamples / _sampleRate) >= _targetDuration;
+            if (_started && _pending.Count > 0)
+                _nextSequence = _pending.Keys.Min();
+        }
         if (!_started) return ready;
 
         while (_pending.TryGetValue(_nextSequence, out var chunk))

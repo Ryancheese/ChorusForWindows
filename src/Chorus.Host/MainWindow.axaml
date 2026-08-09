@@ -175,9 +175,17 @@
             <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="24"/>
-            <Setter Property="Padding" Value="20"/>
-            <Setter Property="BoxShadow" Value="0 12 40 0 #28000000"/>
+            <Setter Property="CornerRadius" Value="20"/>
+            <Setter Property="Padding" Value="14"/>
+            <Setter Property="BoxShadow" Value="0 8 28 0 #22000000"/>
+        </Style>
+        <Style Selector="Border.PlaylistRow">
+            <Setter Property="Background" Value="{DynamicResource RowBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="Padding" Value="10,8"/>
         </Style>
         <Style Selector="Border.PlaylistRow:pointerover">
             <Setter Property="Background" Value="{DynamicResource PlaylistHover}"/>
@@ -247,15 +255,15 @@
                       VerticalScrollBarVisibility="Auto"
                       AllowAutoHide="False">
             <!-- Padding on child (not ScrollViewer) so bottom inset is part of scroll extent -->
-            <StackPanel Spacing="22" Margin="28,28,28,56">
+            <StackPanel Spacing="12" Margin="20,16,20,20">
 
                 <!-- Mac HostApp header: PulsingOrb + title + glass pill buttons -->
                 <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Orientation="Horizontal" Spacing="18">
+                    <StackPanel Orientation="Horizontal" Spacing="14">
                         <!-- PulsingOrb: glow driven in code-behind (XAML Style.Animations were too subtle / flaky) -->
-                        <Grid Width="180" Height="180">
+                        <Grid Width="112" Height="112">
                             <Ellipse x:Name="OrbGlow"
-                                     Width="150" Height="150"
+                                     Width="96" Height="96"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"
                                      IsHitTestVisible="False">
                                 <Ellipse.Fill>
@@ -267,7 +275,7 @@
                                 </Ellipse.Fill>
                             </Ellipse>
                             <Ellipse x:Name="OrbGlowRipple"
-                                     Width="150" Height="150"
+                                     Width="96" Height="96"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"
                                      Opacity="0" IsHitTestVisible="False">
                                 <Ellipse.Fill>
@@ -279,11 +287,11 @@
                                 </Ellipse.Fill>
                             </Ellipse>
 
-                            <Border Width="112" Height="112" CornerRadius="56"
+                            <Border Width="72" Height="72" CornerRadius="36"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelBrush}"
                                     BorderThickness="1.2"
-                                    BoxShadow="0 10 24 0 #22000000">
+                                    BoxShadow="0 8 18 0 #22000000">
                                 <Border.BorderBrush>
                                     <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
                                         <GradientStop Color="#CCFFFFFF" Offset="0"/>
@@ -293,7 +301,7 @@
                             </Border>
 
                             <!-- Idle: dot.radiowaves.left.and.right (SF Symbol proportions) -->
-                            <Viewbox Width="48" Height="48"
+                            <Viewbox Width="32" Height="32"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"
                                      Stretch="Uniform"
                                      IsVisible="{Binding !IsPlaying}">
@@ -309,7 +317,7 @@
                             </Viewbox>
 
                             <!-- Playing: speaker.wave.3.fill -->
-                            <Viewbox Width="48" Height="48"
+                            <Viewbox Width="32" Height="32"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"
                                      Stretch="Uniform"
                                      IsVisible="{Binding IsPlaying}">
@@ -324,8 +332,8 @@
                                 </Canvas>
                             </Viewbox>
                         </Grid>
-                        <StackPanel Spacing="6" VerticalAlignment="Center">
-                            <TextBlock Text="Chorus" FontSize="40" FontWeight="Bold"
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Chorus" FontSize="32" FontWeight="Bold"
                                        FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif"
                                        Foreground="{DynamicResource TextPrimary}"/>
                             <TextBlock Text="{Binding LocTagline}"
@@ -405,11 +413,20 @@
                 </Border>
 
                 <Border Classes="GlassPanel">
-                    <StackPanel Spacing="16">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="{Binding LocNearby}" FontSize="16" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextPrimary}"/>
-                            <Border CornerRadius="12" Padding="14,12" Background="{DynamicResource WarnBg}"
+                    <StackPanel Spacing="10">
+                        <StackPanel Spacing="6">
+                            <DockPanel LastChildFill="True">
+                                <Button DockPanel.Dock="Right"
+                                        Content="{Binding LocConnectAll}"
+                                        Theme="{StaticResource GlassSecondaryButton}"
+                                        Click="ConnectAll_Click"
+                                        IsVisible="{Binding CanConnectAll}"
+                                        Margin="12,0,0,0"/>
+                                <TextBlock Text="{Binding LocNearby}" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimary}"
+                                           VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <Border CornerRadius="10" Padding="10,8" Background="{DynamicResource WarnBg}"
                                     IsVisible="{Binding !HasDiscoveredPeers}">
                                 <TextBlock FontSize="12" Foreground="{DynamicResource WarnFg}" TextWrapping="Wrap"
                                            Text="{Binding LocHintDiscovery}"/>
@@ -420,7 +437,7 @@
                                           IsVisible="{Binding HasDiscoveredPeers}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:PeerRowViewModel">
-                                        <Border Margin="0,4" Padding="12,10" CornerRadius="12"
+                                        <Border Margin="0,2" Padding="10,8" CornerRadius="10"
                                                 Background="{DynamicResource RowBg}"
                                                 BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1">
                                             <DockPanel>
@@ -428,11 +445,11 @@
                                                         Content="{Binding ActionLabel}"
                                                         Theme="{StaticResource GlassSecondaryButton}"
                                                         Click="PeerConnect_Click" Tag="{Binding}"/>
-                                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding InstanceName}" FontSize="14"
+                                                <StackPanel Spacing="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding InstanceName}" FontSize="13"
                                                                FontWeight="SemiBold"
                                                                Foreground="{DynamicResource TextPrimary}"/>
-                                                    <TextBlock Text="{Binding IPDisplay}" FontSize="12"
+                                                    <TextBlock Text="{Binding IPDisplay}" FontSize="11"
                                                                Foreground="{DynamicResource TextMuted}"/>
                                                 </StackPanel>
                                             </DockPanel>
@@ -442,40 +459,40 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <Border Height="1" Background="{DynamicResource DividerBrush}" Opacity="0.6"/>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" Opacity="0.5"/>
 
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="{Binding LocManual}" FontSize="16" FontWeight="SemiBold"
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{Binding LocManual}" FontSize="15" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimary}"/>
-                            <TextBlock Text="{Binding LocalIPDisplay}" FontSize="12"
+                            <TextBlock Text="{Binding LocalIPDisplay}" FontSize="11"
                                        Foreground="{DynamicResource TextSecondary}"
                                        IsVisible="{Binding HasLocalIP}"/>
                             <Grid ColumnDefinitions="*,Auto,Auto">
                                 <TextBox Classes="GlassField"
                                          Text="{Binding ManualIP}"
                                          Watermark="{Binding LocPhoneIpWatermark}"/>
-                                <TextBox Grid.Column="1" Classes="GlassField" Width="90" Margin="10,0,0,0"
+                                <TextBox Grid.Column="1" Classes="GlassField" Width="90" Margin="8,0,0,0"
                                          Text="{Binding ManualPort}"
                                          Watermark="{Binding LocPortWatermark}"/>
-                                <Button Grid.Column="2" Content="{Binding ManualConnectLabel}" Margin="10,0,0,0"
+                                <Button Grid.Column="2" Content="{Binding ManualConnectLabel}" Margin="8,0,0,0"
                                         Theme="{StaticResource GlassSecondaryButton}"
                                         Click="ManualConnect_Click"
                                         IsEnabled="{Binding CanManualConnect}"/>
                             </Grid>
                         </StackPanel>
 
-                        <Border Height="1" Background="{DynamicResource DividerBrush}" Opacity="0.6"/>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" Opacity="0.5"/>
 
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="{Binding LocSession}" FontSize="16" FontWeight="SemiBold"
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{Binding LocSession}" FontSize="15" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimary}"/>
-                            <TextBlock Text="{Binding LocHintConnect}" FontSize="12"
+                            <TextBlock Text="{Binding LocHintConnect}" FontSize="11"
                                        Foreground="{DynamicResource TextMuted}"
                                        IsVisible="{Binding !HasSpeakers}"/>
                             <ItemsControl ItemsSource="{Binding Speakers}" IsVisible="{Binding HasSpeakers}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="protocol:DeviceInfo">
-                                        <Border Margin="0,4" Padding="12,10" CornerRadius="12"
+                                        <Border Margin="0,2" Padding="10,8" CornerRadius="10"
                                                 Background="{DynamicResource RowBg}"
                                                 BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1">
                                             <DockPanel>
@@ -483,20 +500,26 @@
                                                         Content="{Binding #Root.((vm:HostViewModel)DataContext).LocDisconnect}"
                                                         Theme="{StaticResource GlassSecondaryButton}"
                                                         Click="RemoveSpeaker_Click" Tag="{Binding}"/>
-                                                <StackPanel Orientation="Horizontal" Spacing="10"
-                                                            VerticalAlignment="Center">
-                                                    <TextBlock Text="✓" Foreground="{DynamicResource MintBrush}"
-                                                               FontSize="14" FontWeight="Bold"/>
-                                                    <TextBlock Text="{Binding Name}" FontSize="14"
-                                                               Foreground="{DynamicResource TextPrimary}"/>
-                                                    <Border Background="#22FFFFFF" CornerRadius="8" Padding="8,2">
-                                                        <TextBlock Text="{Binding PlatformLabel}" FontSize="11"
+                                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="✓" Foreground="{DynamicResource MintBrush}"
+                                                                   FontSize="13" FontWeight="Bold"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding DisplayName}" FontSize="13"
                                                                    FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource TextPrimary}"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <Border Background="#22FFFFFF" CornerRadius="6" Padding="6,1">
+                                                            <TextBlock Text="{Binding PlatformLabel}" FontSize="10"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource TextMuted}"/>
+                                                        </Border>
+                                                        <TextBlock Text="{Binding #Root.((vm:HostViewModel)DataContext).LocReady}"
+                                                                   FontSize="11"
                                                                    Foreground="{DynamicResource TextMuted}"/>
-                                                    </Border>
-                                                    <TextBlock Text="{Binding #Root.((vm:HostViewModel)DataContext).LocReady}"
-                                                               FontSize="12"
-                                                               Foreground="{DynamicResource TextMuted}"/>
+                                                    </StackPanel>
                                                 </StackPanel>
                                             </DockPanel>
                                         </Border>
@@ -509,8 +532,8 @@
 
                 <Border Classes="GlassPanel">
                     <Grid ColumnDefinitions="*,Auto,*">
-                        <StackPanel Spacing="14" Margin="0,0,20,0">
-                            <TextBlock Text="{Binding LocPlayback}" FontSize="16" FontWeight="SemiBold"
+                        <StackPanel Spacing="10" Margin="0,0,14,0">
+                            <TextBlock Text="{Binding LocPlayback}" FontSize="15" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimary}"/>
                             <CheckBox Content="{Binding LocPlayLocal}" IsChecked="{Binding PlayLocal}"
                                       IsEnabled="{Binding CanPlayLocal}"
@@ -531,7 +554,7 @@
                                     HorizontalAlignment="Left"
                                     Theme="{StaticResource GlassSecondaryButton}"
                                     IsEnabled="{Binding CanStartSystemAudio}"/>
-                            <StackPanel Spacing="4" Margin="0,4,0,0">
+                            <StackPanel Spacing="4">
                                 <TextBlock Text="{Binding LocalSyncOffsetLabel}" FontSize="12"
                                            Foreground="{DynamicResource TextSecondary}"/>
                                 <Slider Minimum="-120" Maximum="120" TickFrequency="5"
@@ -542,12 +565,12 @@
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6"
                                         IsVisible="{Binding HasCurrentItem}">
-                                <TextBlock Text="{Binding LocNowPlaying}" FontSize="13"
+                                <TextBlock Text="{Binding LocNowPlaying}" FontSize="12"
                                            Foreground="{DynamicResource TextMuted}"/>
-                                <TextBlock Text="{Binding Playlist.Current.Title}" FontSize="13"
+                                <TextBlock Text="{Binding Playlist.Current.Title}" FontSize="12"
                                            Foreground="{DynamicResource AccentSoftBrush}" FontWeight="Medium"/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Button Click="PlayPrev_Click"
                                         Theme="{StaticResource MediaIconButton}"
                                         Content="{StaticResource IconSkipBack}"
@@ -568,60 +591,73 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <Border Grid.Column="1" Width="1" Background="{DynamicResource DividerBrush}" Margin="0,4" Opacity="0.6"/>
+                        <Border Grid.Column="1" Width="1" Background="{DynamicResource DividerBrush}" Margin="0,2" Opacity="0.5"/>
 
-                        <StackPanel Grid.Column="2" Spacing="10" Margin="20,0,0,0">
-                            <DockPanel>
-                                <TextBlock Text="{Binding LocPlaylist}" FontSize="16" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource TextPrimary}"/>
-                                <TextBlock Text="{Binding Playlist.Items.Count}" FontSize="13"
-                                           Foreground="{DynamicResource TextMuted}"
-                                           DockPanel.Dock="Right" HorizontalAlignment="Right"/>
+                        <DockPanel Grid.Column="2" Margin="14,0,0,0">
+                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <Button DockPanel.Dock="Right"
+                                        Content="{Binding LocClearPlaylist}" Click="ClearPlaylist_Click"
+                                        IsEnabled="{Binding HasItems}"
+                                        Theme="{StaticResource GlassSecondaryButton}"
+                                        Margin="8,0,0,0"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding LocPlaylist}" FontSize="15" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimary}"/>
+                                    <Border Background="#22FFFFFF" CornerRadius="8" Padding="7,1"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Playlist.Items.Count}" FontSize="11"
+                                                   Foreground="{DynamicResource TextMuted}"/>
+                                    </Border>
+                                </StackPanel>
                             </DockPanel>
-                            <TextBlock Text="{Binding LocHintPlaylistEmpty}"
-                                       FontSize="12" Foreground="{DynamicResource TextMuted}"
-                                       IsVisible="{Binding !HasItems}"/>
-                            <ItemsControl ItemsSource="{Binding Playlist.Items}"
-                                          IsVisible="{Binding HasItems}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="audio:PlaylistItem">
-                                        <Border Classes="PlaylistRow" CornerRadius="10" Margin="0,2">
-                                            <Grid>
-                                                <Border CornerRadius="10"
-                                                        Background="{DynamicResource PlaylistCurrent}"
-                                                        IsVisible="{Binding IsCurrent}"/>
-                                                <Grid Margin="10,8" ColumnDefinitions="*,Auto">
-                                                    <Button Grid.Column="0" Click="PlaylistPlay_Click"
-                                                            Tag="{Binding}" Padding="0"
-                                                            HorizontalAlignment="Stretch"
-                                                            HorizontalContentAlignment="Left"
-                                                            Background="Transparent" BorderThickness="0"
-                                                            Cursor="Hand">
-                                                        <TextBlock Text="{Binding Title}" FontSize="13"
-                                                                   Foreground="{DynamicResource TextPrimary}"
-                                                                   TextTrimming="CharacterEllipsis"/>
-                                                    </Button>
-                                                    <Button Grid.Column="1" Content="✕" FontSize="11"
-                                                            Foreground="{DynamicResource TextMuted}"
-                                                            Background="Transparent" BorderThickness="0"
-                                                            Click="PlaylistRemove_Click" Tag="{Binding}"
-                                                            Width="24" Height="24" Padding="0"/>
-                                                </Grid>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <Button Content="{Binding LocClearPlaylist}" Click="ClearPlaylist_Click"
-                                    IsEnabled="{Binding HasItems}"
-                                    Theme="{StaticResource GlassSecondaryButton}"
-                                    HorizontalAlignment="Left"/>
-                        </StackPanel>
+                            <Border Background="{DynamicResource FieldBg}"
+                                    BorderBrush="{DynamicResource PanelBorderBrush}"
+                                    BorderThickness="1" CornerRadius="12" Padding="8"
+                                    MinHeight="160" MaxHeight="280">
+                                <Panel>
+                                    <TextBlock Text="{Binding LocHintPlaylistEmpty}"
+                                               FontSize="12" Foreground="{DynamicResource TextMuted}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               IsVisible="{Binding !HasItems}" TextWrapping="Wrap"
+                                               TextAlignment="Center" Margin="12"/>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                  IsVisible="{Binding HasItems}">
+                                        <ItemsControl ItemsSource="{Binding Playlist.Items}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="audio:PlaylistItem">
+                                                    <Border Classes="PlaylistRow">
+                                                        <Panel>
+                                                            <Border CornerRadius="8"
+                                                                    Background="{DynamicResource PlaylistCurrent}"
+                                                                    IsVisible="{Binding IsCurrent}"/>
+                                                            <Grid ColumnDefinitions="*,Auto">
+                                                                <Button Grid.Column="0" Click="PlaylistPlay_Click"
+                                                                        Tag="{Binding}" Padding="2,0"
+                                                                        HorizontalAlignment="Stretch"
+                                                                        HorizontalContentAlignment="Left"
+                                                                        Background="Transparent" BorderThickness="0"
+                                                                        Cursor="Hand">
+                                                                    <TextBlock Text="{Binding Title}" FontSize="13"
+                                                                               Foreground="{DynamicResource TextPrimary}"
+                                                                               TextTrimming="CharacterEllipsis"/>
+                                                                </Button>
+                                                                <Button Grid.Column="1" Content="✕" FontSize="11"
+                                                                        Foreground="{DynamicResource TextMuted}"
+                                                                        Background="Transparent" BorderThickness="0"
+                                                                        Click="PlaylistRemove_Click" Tag="{Binding}"
+                                                                        Width="24" Height="24" Padding="0"/>
+                                                            </Grid>
+                                                        </Panel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Panel>
+                            </Border>
+                        </DockPanel>
                     </Grid>
                 </Border>
-
-                <!-- Extra scroll slack so last controls aren't clipped by window chrome -->
-                <Border Height="32"/>
             </StackPanel>
         </ScrollViewer>
 

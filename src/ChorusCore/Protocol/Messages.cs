@@ -36,7 +36,9 @@ public sealed record DeviceInfo(
     [property: JsonPropertyName("role")] DeviceRole Role,
     [property: JsonPropertyName("protocolVersion")] ushort ProtocolVersion = SyncProtocol.Version,
     /// <summary>Optional platform hint: ios / android / windows / macos.</summary>
-    [property: JsonPropertyName("platform")] string? Platform = null)
+    [property: JsonPropertyName("platform")] string? Platform = null,
+    /// <summary>Optional hardware model, e.g. "iPhone 15 Pro".</summary>
+    [property: JsonPropertyName("model")] string? Model = null)
 {
     /// <summary>Short label for Host UI (not serialized).</summary>
     [JsonIgnore]
@@ -49,6 +51,19 @@ public sealed record DeviceInfo(
         "macos" or "mac" => "Mac",
         _ => Role == DeviceRole.Host ? "Host" : "Speaker",
     };
+
+    /// <summary>Name plus model when available (Host session list).</summary>
+    [JsonIgnore]
+    public string DisplayName
+    {
+        get
+        {
+            var model = Model?.Trim() ?? "";
+            if (model.Length == 0) return Name;
+            if (Name.Contains(model, StringComparison.OrdinalIgnoreCase)) return Name;
+            return $"{Name} · {model}";
+        }
+    }
 }
 
 /// <summary>Host -> Speaker clock probe.</summary>

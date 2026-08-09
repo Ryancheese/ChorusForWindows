@@ -69,9 +69,10 @@ public sealed class SpeakerSession : IDisposable
     {
         _localDevice = new DeviceInfo(
             Guid.NewGuid().ToString(),
-            Environment.MachineName + "-Speaker",
+            Environment.MachineName,
             DeviceRole.Speaker,
-            Platform: "windows");
+            Platform: "windows",
+            Model: Environment.OSVersion.VersionString);
     }
 
     public void StartAdvertising(ushort port = SyncBonjour.ControlPort)

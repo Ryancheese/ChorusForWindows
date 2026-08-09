@@ -149,6 +149,8 @@ public partial class MainWindow : Window
             ViewModel?.ConnectToPeerRow(row);
     }
 
+    public void ConnectAll_Click(object? sender, RoutedEventArgs e) => ViewModel?.ConnectAllPeers();
+
     public void RemoveSpeaker_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is DeviceInfo speaker)
