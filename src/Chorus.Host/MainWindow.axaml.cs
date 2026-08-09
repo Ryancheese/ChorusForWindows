@@ -165,6 +165,7 @@ public partial class MainWindow : Window
 
     public void PlaylistRemove_Click(object? sender, RoutedEventArgs e)
     {
+        e.Handled = true;
         if (sender is Button btn && btn.Tag is PlaylistItem item)
             ViewModel?.RemoveFromPlaylist(item.Id);
     }

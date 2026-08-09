@@ -167,6 +167,58 @@
                     <Setter Property="Opacity" Value="0.4"/>
                 </Style>
             </ControlTheme>
+
+            <!-- Whole playlist row is one button so hover fills edge-to-edge -->
+            <ControlTheme x:Key="PlaylistRowButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="CornerRadius" Value="10"/>
+                <Setter Property="Padding" Value="10,8"/>
+                <Setter Property="Margin" Value="0,0,0,2"/>
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <ControlTemplate TargetType="Button">
+                        <Panel>
+                            <Border x:Name="HoverFill"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"/>
+                            <Border x:Name="CurrentFill"
+                                    Background="{DynamicResource PlaylistCurrent}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    IsVisible="False"/>
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalContentAlignment="Stretch"
+                                              VerticalContentAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                        </Panel>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^:pointerover /template/ Border#HoverFill">
+                    <Setter Property="Background" Value="{DynamicResource PlaylistHover}"/>
+                </Style>
+                <Style Selector="^.isCurrent /template/ Border#CurrentFill">
+                    <Setter Property="IsVisible" Value="True"/>
+                </Style>
+            </ControlTheme>
+
+            <!-- Icon-only controls inside a row — never paint their own hover -->
+            <ControlTheme x:Key="PlaylistGhostButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          Foreground="{TemplateBinding Foreground}"/>
+                    </ControlTemplate>
+                </Setter>
+            </ControlTheme>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -178,17 +230,6 @@
             <Setter Property="CornerRadius" Value="20"/>
             <Setter Property="Padding" Value="14"/>
             <Setter Property="BoxShadow" Value="0 8 28 0 #22000000"/>
-        </Style>
-        <Style Selector="Border.PlaylistRow">
-            <Setter Property="Background" Value="{DynamicResource RowBg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Margin" Value="0,0,0,6"/>
-            <Setter Property="Padding" Value="10,8"/>
-        </Style>
-        <Style Selector="Border.PlaylistRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource PlaylistHover}"/>
         </Style>
         <Style Selector="TextBox.GlassField">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
@@ -512,7 +553,7 @@
                                                     </StackPanel>
                                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                                         <Border Background="#22FFFFFF" CornerRadius="6" Padding="6,1">
-                                                            <TextBlock Text="{Binding PlatformLabel}" FontSize="10"
+                                                            <TextBlock Text="{Binding DetailLabel}" FontSize="10"
                                                                        FontWeight="SemiBold"
                                                                        Foreground="{DynamicResource TextMuted}"/>
                                                         </Border>
@@ -593,69 +634,64 @@
 
                         <Border Grid.Column="1" Width="1" Background="{DynamicResource DividerBrush}" Margin="0,2" Opacity="0.5"/>
 
-                        <DockPanel Grid.Column="2" Margin="14,0,0,0">
-                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                                <Button DockPanel.Dock="Right"
-                                        Content="{Binding LocClearPlaylist}" Click="ClearPlaylist_Click"
-                                        IsEnabled="{Binding HasItems}"
-                                        Theme="{StaticResource GlassSecondaryButton}"
-                                        Margin="8,0,0,0"/>
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding LocPlaylist}" FontSize="15" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource TextPrimary}"/>
-                                    <Border Background="#22FFFFFF" CornerRadius="8" Padding="7,1"
-                                            VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Playlist.Items.Count}" FontSize="11"
-                                                   Foreground="{DynamicResource TextMuted}"/>
-                                    </Border>
-                                </StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="8" Margin="14,0,0,0">
+                            <DockPanel>
+                                <TextBlock Text="{Binding Playlist.Items.Count}" FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextMuted}"
+                                           DockPanel.Dock="Right" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding LocPlaylist}" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimary}"/>
                             </DockPanel>
-                            <Border Background="{DynamicResource FieldBg}"
-                                    BorderBrush="{DynamicResource PanelBorderBrush}"
-                                    BorderThickness="1" CornerRadius="12" Padding="8"
-                                    MinHeight="160" MaxHeight="280">
-                                <Panel>
-                                    <TextBlock Text="{Binding LocHintPlaylistEmpty}"
-                                               FontSize="12" Foreground="{DynamicResource TextMuted}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               IsVisible="{Binding !HasItems}" TextWrapping="Wrap"
-                                               TextAlignment="Center" Margin="12"/>
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                                  IsVisible="{Binding HasItems}">
-                                        <ItemsControl ItemsSource="{Binding Playlist.Items}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="audio:PlaylistItem">
-                                                    <Border Classes="PlaylistRow">
-                                                        <Panel>
-                                                            <Border CornerRadius="8"
-                                                                    Background="{DynamicResource PlaylistCurrent}"
-                                                                    IsVisible="{Binding IsCurrent}"/>
-                                                            <Grid ColumnDefinitions="*,Auto">
-                                                                <Button Grid.Column="0" Click="PlaylistPlay_Click"
-                                                                        Tag="{Binding}" Padding="2,0"
-                                                                        HorizontalAlignment="Stretch"
-                                                                        HorizontalContentAlignment="Left"
-                                                                        Background="Transparent" BorderThickness="0"
-                                                                        Cursor="Hand">
-                                                                    <TextBlock Text="{Binding Title}" FontSize="13"
-                                                                               Foreground="{DynamicResource TextPrimary}"
-                                                                               TextTrimming="CharacterEllipsis"/>
-                                                                </Button>
-                                                                <Button Grid.Column="1" Content="✕" FontSize="11"
-                                                                        Foreground="{DynamicResource TextMuted}"
-                                                                        Background="Transparent" BorderThickness="0"
-                                                                        Click="PlaylistRemove_Click" Tag="{Binding}"
-                                                                        Width="24" Height="24" Padding="0"/>
-                                                            </Grid>
-                                                        </Panel>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
-                                </Panel>
-                            </Border>
-                        </DockPanel>
+
+                            <TextBlock Text="{Binding LocHintPlaylistEmpty}"
+                                       FontSize="12" Foreground="{DynamicResource TextMuted}"
+                                       IsVisible="{Binding !HasItems}" TextWrapping="Wrap"/>
+
+                            <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          IsVisible="{Binding HasItems}">
+                                <ItemsControl ItemsSource="{Binding Playlist.Items}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Spacing="0"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="audio:PlaylistItem">
+                                            <Button Theme="{StaticResource PlaylistRowButton}"
+                                                    Classes.isCurrent="{Binding IsCurrent}"
+                                                    Click="PlaylistPlay_Click"
+                                                    Tag="{Binding}">
+                                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                                    <TextBlock Grid.Column="0" Text="♪" FontSize="12" Width="16"
+                                                               VerticalAlignment="Center" Margin="0,0,8,0"
+                                                               Foreground="{DynamicResource TextMuted}"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="13"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource TextPrimary}"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                    <Button Grid.Column="2"
+                                                            Theme="{StaticResource PlaylistGhostButton}"
+                                                            Content="✕" FontSize="12"
+                                                            Foreground="{DynamicResource TextMuted}"
+                                                            Width="28" Height="28"
+                                                            Opacity="0.65"
+                                                            Click="PlaylistRemove_Click"
+                                                            Tag="{Binding}"
+                                                            ToolTip.Tip="移除"/>
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <Button Content="{Binding LocClearPlaylist}" Click="ClearPlaylist_Click"
+                                    IsEnabled="{Binding HasItems}"
+                                    Theme="{StaticResource GlassSecondaryButton}"
+                                    HorizontalAlignment="Left"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
             </StackPanel>

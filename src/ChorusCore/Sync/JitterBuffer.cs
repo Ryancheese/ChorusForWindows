@@ -51,9 +51,12 @@ public sealed class AudioJitterBuffer
 
         if (!_started)
         {
-            _started = (_bufferedSamples / _sampleRate) >= _targetDuration;
-            if (_started && _pending.Count > 0)
-                _nextSequence = _pending.Keys.Min();
+            var minSeq = _pending.Count > 0 ? _pending.Keys.Min() : header.Sequence;
+            bool lateJoin = minSeq > 0;
+            double threshold = lateJoin ? Math.Min(_targetDuration, 0.25) : _targetDuration;
+            _started = (_bufferedSamples / _sampleRate) >= threshold;
+            if (_started)
+                _nextSequence = minSeq;
         }
         if (!_started) return ready;
 

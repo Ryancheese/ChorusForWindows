@@ -58,12 +58,24 @@ public sealed record DeviceInfo(
     {
         get
         {
+            var name = Name?.Trim() ?? "";
             var model = Model?.Trim() ?? "";
-            if (model.Length == 0) return Name;
-            if (Name.Contains(model, StringComparison.OrdinalIgnoreCase)) return Name;
-            return $"{Name} · {model}";
+            var generic = name.Equals("iPhone", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("iPad", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("iPod", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Android", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Speaker", StringComparison.OrdinalIgnoreCase);
+            if (generic && model.Length > 0) return model;
+            if (model.Length == 0) return name.Length > 0 ? name : PlatformLabel;
+            if (name.Contains(model, StringComparison.OrdinalIgnoreCase)) return name;
+            return $"{name} · {model}";
         }
     }
+
+    /// <summary>Secondary chip: prefer hardware model over generic platform.</summary>
+    [JsonIgnore]
+    public string DetailLabel =>
+        string.IsNullOrWhiteSpace(Model) ? PlatformLabel : Model!.Trim();
 }
 
 /// <summary>Host -> Speaker clock probe.</summary>
