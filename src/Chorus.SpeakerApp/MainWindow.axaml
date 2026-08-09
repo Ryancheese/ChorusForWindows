@@ -6,115 +6,300 @@
         x:Class="Chorus.SpeakerApp.MainWindow"
         x:DataType="vm:SpeakerViewModel"
         Title="Chorus Speaker"
-        Width="480" Height="640"
-        MinWidth="420" MinHeight="560"
+        Width="460" Height="680"
+        MinWidth="400" MinHeight="580"
         WindowStartupLocation="CenterScreen"
-        Background="#0A0F1A">
+        Background="{DynamicResource WindowBgBrush}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="WindowBgBrush" Color="#0A0F1A"/>
+                    <SolidColorBrush x:Key="AccentBrush" Color="#2E85DC"/>
+                    <SolidColorBrush x:Key="AccentSoftBrush" Color="#59B8EB"/>
+                    <SolidColorBrush x:Key="MintBrush" Color="#73D1C7"/>
+                    <SolidColorBrush x:Key="PanelBrush" Color="#99141C2B"/>
+                    <SolidColorBrush x:Key="PanelBorderBrush" Color="#33FFFFFF"/>
+                    <SolidColorBrush x:Key="TextPrimary" Color="#F1F5F9"/>
+                    <SolidColorBrush x:Key="TextSecondary" Color="#94A3B8"/>
+                    <SolidColorBrush x:Key="TextMuted" Color="#64748B"/>
+                    <SolidColorBrush x:Key="ChipBg" Color="#18FFFFFF"/>
+                    <SolidColorBrush x:Key="ErrorBrush" Color="#F87171"/>
+                    <Color x:Key="Grad0">#0A0F1A</Color>
+                    <Color x:Key="Grad1">#121C2E</Color>
+                    <Color x:Key="Grad2">#0D1422</Color>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <StreamGeometry x:Key="IconSpeakerBody">M3.2,8.8 L3.2,15.2 L7.4,15.2 L12.2,19.2 L12.2,4.8 L7.4,8.8 Z</StreamGeometry>
+            <StreamGeometry x:Key="IconSpeakerArcs">M14.8,9.2 C15.8,10.2 16.4,11.2 16.4,12.5 C16.4,13.8 15.8,14.8 14.8,15.8 M17.2,7 C18.8,8.6 19.7,10.4 19.7,12.5 C19.7,14.6 18.8,16.4 17.2,18 M19.6,4.8 C21.8,7 23,9.6 23,12.5 C23,15.4 21.8,18 19.6,20.2</StreamGeometry>
+            <StreamGeometry x:Key="IconRadiowavesArcs">M8.1,8.3 C6.7,9.5 5.9,10.7 5.9,12 C5.9,13.3 6.7,14.5 8.1,15.7 M5.2,6.1 C3.2,7.9 2.1,9.8 2.1,12 C2.1,14.2 3.2,16.1 5.2,17.9 M15.9,8.3 C17.3,9.5 18.1,10.7 18.1,12 C18.1,13.3 17.3,14.5 15.9,15.7 M18.8,6.1 C20.8,7.9 21.9,9.8 21.9,12 C21.9,14.2 20.8,16.1 18.8,17.9</StreamGeometry>
+            <LinearGradientBrush x:Key="OrbIconGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="#2E85DC" Offset="0"/>
+                <GradientStop Color="#73D1C7" Offset="1"/>
+            </LinearGradientBrush>
+
+            <ControlTheme x:Key="PrimaryPill" TargetType="Button">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="CornerRadius" Value="999"/>
+                <Setter Property="Padding" Value="24,14"/>
+                <Setter Property="FontSize" Value="15"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="ClipToBounds" Value="False"/>
+                <Setter Property="Template">
+                    <ControlTemplate TargetType="Button">
+                        <!-- Soft oval glow (BoxShadow draws a sharp rectangle under pills) -->
+                        <Panel>
+                            <Ellipse Height="28" Margin="18,0"
+                                     VerticalAlignment="Bottom" Opacity="0.45"
+                                     IsHitTestVisible="False">
+                                <Ellipse.Fill>
+                                    <RadialGradientBrush>
+                                        <GradientStop Color="#992E85DC" Offset="0"/>
+                                        <GradientStop Color="#002E85DC" Offset="1"/>
+                                    </RadialGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                            <Border Background="{TemplateBinding Background}"
+                                    CornerRadius="999"
+                                    Padding="{TemplateBinding Padding}"
+                                    ClipToBounds="True">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Content="{TemplateBinding Content}"
+                                                  Foreground="{TemplateBinding Foreground}"/>
+                            </Border>
+                        </Panel>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^:pointerover /template/ Border">
+                    <Setter Property="Background" Value="#3A93E8"/>
+                </Style>
+                <Style Selector="^.isStop /template/ Border">
+                    <Setter Property="Background" Value="#334155"/>
+                </Style>
+                <Style Selector="^.isStop:pointerover /template/ Border">
+                    <Setter Property="Background" Value="#475569"/>
+                </Style>
+            </ControlTheme>
+        </ResourceDictionary>
+    </Window.Resources>
 
     <Window.Styles>
-        <Style Selector="Border.GlassCard">
-            <Setter Property="Background" Value="#99141C2B"/>
-            <Setter Property="BorderBrush" Value="#55FFFFFF"/>
+        <Style Selector="Border.GlassPanel">
+            <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="28"/>
-            <Setter Property="Padding" Value="24,28"/>
+            <Setter Property="CornerRadius" Value="24"/>
+            <Setter Property="Padding" Value="22,20"/>
+            <Setter Property="BoxShadow" Value="0 10 32 0 #28000000"/>
         </Style>
-        <Style Selector="Border.Chip">
-            <Setter Property="Background" Value="#1AFFFFFF"/>
-            <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+        <Style Selector="Border.MetricChip">
+            <Setter Property="Background" Value="{DynamicResource ChipBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="999"/>
+            <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="Padding" Value="14,10"/>
-        </Style>
-        <Style Selector="Button.Primary">
-            <Setter Property="Background" Value="#2E85DC"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontSize" Value="16"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="Padding" Value="20,14"/>
-            <Setter Property="CornerRadius" Value="50"/>
+            <Setter Property="MinWidth" Value="120"/>
         </Style>
     </Window.Styles>
 
-    <Grid Margin="28">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Panel>
+        <Grid>
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="{DynamicResource Grad0}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource Grad1}" Offset="0.45"/>
+                    <GradientStop Color="{DynamicResource Grad2}" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
+        </Grid>
 
-        <StackPanel HorizontalAlignment="Center" Spacing="6" Margin="0,12,0,0">
-            <Border Width="74" Height="74" CornerRadius="37"
-                    Background="#14FFFFFF" BorderBrush="#66FFFFFF" BorderThickness="1"
-                    HorizontalAlignment="Center">
-                <TextBlock Text="♪" FontSize="34" Foreground="#59B8EB"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-            <TextBlock Text="{Binding Title}" FontSize="34" FontWeight="Bold"
-                       Foreground="#F1F5F9" HorizontalAlignment="Center"/>
-            <TextBlock Text="{Binding Subtitle}" FontSize="16" FontWeight="Medium"
-                       Foreground="#8AA0B8" HorizontalAlignment="Center"/>
-        </StackPanel>
+        <Canvas x:Name="LiquidGlassLayer" IsHitTestVisible="False" ClipToBounds="False">
+            <Ellipse x:Name="GlassBlobCyan" Width="320" Height="320" Opacity="0.42">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#A059B8EB" Offset="0"/>
+                        <GradientStop Color="#6659B8EB" Offset="0.35"/>
+                        <GradientStop Color="#2059B8EB" Offset="0.65"/>
+                        <GradientStop Color="#0059B8EB" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse x:Name="GlassBlobMint" Width="280" Height="280" Opacity="0.36">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#9973D1C7" Offset="0"/>
+                        <GradientStop Color="#5573D1C7" Offset="0.4"/>
+                        <GradientStop Color="#1873D1C7" Offset="0.7"/>
+                        <GradientStop Color="#0073D1C7" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse x:Name="GlassBlobMist" Width="260" Height="260" Opacity="0.5">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#99C8D4E4" Offset="0"/>
+                        <GradientStop Color="#55A8B8CC" Offset="0.35"/>
+                        <GradientStop Color="#332E3B52" Offset="0.7"/>
+                        <GradientStop Color="#002E3B52" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+        </Canvas>
 
-        <Border Grid.Row="1" Classes="GlassCard" VerticalAlignment="Center" Margin="0,28">
-            <StackPanel Spacing="12" HorizontalAlignment="Center">
-                <TextBlock Text="{Binding PhaseLabel}" FontSize="22" FontWeight="SemiBold"
-                           Foreground="White" HorizontalAlignment="Center"/>
-                <TextBlock Text="{Binding Status}" FontSize="14"
-                           Foreground="#8AA0B8" TextWrapping="Wrap"
-                           TextAlignment="Center" MaxWidth="320"
-                           HorizontalAlignment="Center"/>
-
-                <StackPanel Orientation="Horizontal" Spacing="12"
-                            HorizontalAlignment="Center" Margin="0,8,0,0"
-                            IsVisible="{Binding HasHost}">
-                    <Border Classes="Chip">
-                        <StackPanel HorizontalAlignment="Center" Spacing="2">
-                            <TextBlock Text="主机" FontSize="11" FontWeight="SemiBold"
-                                       Foreground="#8AA0B8" HorizontalAlignment="Center"/>
-                            <TextBlock Text="{Binding HostName}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="White" MaxWidth="160" TextTrimming="CharacterEllipsis"
-                                       HorizontalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Classes="Chip">
-                        <StackPanel HorizontalAlignment="Center" Spacing="2">
-                            <TextBlock Text="时钟" FontSize="11" FontWeight="SemiBold"
-                                       Foreground="#8AA0B8" HorizontalAlignment="Center"/>
-                            <TextBlock Text="{Binding ClockLabel}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="White" HorizontalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <StackPanel Spacing="4" Margin="0,8,0,0"
-                            IsVisible="{Binding HasLocalAddress}"
-                            HorizontalAlignment="Center">
-                    <TextBlock Text="本机地址" FontSize="11" FontWeight="SemiBold"
-                               Foreground="#6B7C90" HorizontalAlignment="Center"/>
-                    <TextBlock Text="{Binding LocalAddress}" FontSize="16" FontWeight="SemiBold"
-                               Foreground="#59B8EB" HorizontalAlignment="Center"/>
-                    <TextBlock Text="企业网若无法发现，请在 Host 手动连接此地址"
-                               FontSize="12" Foreground="#6B7C90"
-                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="280"/>
-                </StackPanel>
-
-                <TextBlock Text="{Binding ErrorMessage}" FontSize="13"
-                           Foreground="#FF8A80" TextWrapping="Wrap"
-                           TextAlignment="Center" MaxWidth="320"
-                           IsVisible="{Binding HasError}" HorizontalAlignment="Center"/>
+        <DockPanel Margin="28,24,28,28">
+            <StackPanel DockPanel.Dock="Bottom" Spacing="12">
+                <TextBlock Text="{Binding Hint}" FontSize="12"
+                           Foreground="{DynamicResource TextMuted}" TextWrapping="Wrap"
+                           TextAlignment="Center"/>
+                <Button Theme="{StaticResource PrimaryPill}"
+                        Classes.isStop="{Binding IsAdvertising}"
+                        Content="{Binding PrimaryActionLabel}"
+                        Click="Toggle_Click"/>
             </StackPanel>
-        </Border>
 
-        <TextBlock Grid.Row="2" Text="{Binding Hint}" FontSize="12"
-                   Foreground="#6B7C90" TextWrapping="Wrap"
-                   TextAlignment="Center" Margin="8,0,8,16"/>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="22" VerticalAlignment="Center">
+                    <StackPanel Spacing="10" HorizontalAlignment="Center">
+                        <Grid Width="120" Height="120" HorizontalAlignment="Center">
+                            <Ellipse x:Name="OrbGlow"
+                                     Width="100" Height="100"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     IsHitTestVisible="False">
+                                <Ellipse.Fill>
+                                    <RadialGradientBrush>
+                                        <GradientStop Color="#A059B8EB" Offset="0"/>
+                                        <GradientStop Color="#6659B8EB" Offset="0.4"/>
+                                        <GradientStop Color="#0059B8EB" Offset="1"/>
+                                    </RadialGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                            <Ellipse x:Name="OrbGlowRipple"
+                                     Width="100" Height="100"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Opacity="0" IsHitTestVisible="False">
+                                <Ellipse.Fill>
+                                    <RadialGradientBrush>
+                                        <GradientStop Color="#002E85DC" Offset="0.3"/>
+                                        <GradientStop Color="#552E85DC" Offset="0.7"/>
+                                        <GradientStop Color="#002E85DC" Offset="1"/>
+                                    </RadialGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                            <Border Width="76" Height="76" CornerRadius="38"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Background="{DynamicResource PanelBrush}"
+                                    BorderThickness="1.2"
+                                    BoxShadow="0 8 20 0 #22000000">
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="#CCFFFFFF" Offset="0"/>
+                                        <GradientStop Color="#40FFFFFF" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                            </Border>
+                            <Viewbox Width="34" Height="34"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     IsVisible="{Binding !IsPlaying}">
+                                <Canvas Width="24" Height="24">
+                                    <Ellipse Canvas.Left="9.4" Canvas.Top="9.4" Width="5.2" Height="5.2"
+                                             Fill="{StaticResource OrbIconGradient}"/>
+                                    <Path Data="{StaticResource IconRadiowavesArcs}"
+                                          Fill="Transparent"
+                                          Stroke="{StaticResource OrbIconGradient}"
+                                          StrokeThickness="1.85"
+                                          StrokeLineCap="Round"/>
+                                </Canvas>
+                            </Viewbox>
+                            <Viewbox Width="34" Height="34"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     IsVisible="{Binding IsPlaying}">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource IconSpeakerBody}"
+                                          Fill="{StaticResource OrbIconGradient}"/>
+                                    <Path Data="{StaticResource IconSpeakerArcs}"
+                                          Fill="Transparent"
+                                          Stroke="{StaticResource OrbIconGradient}"
+                                          StrokeThickness="1.7"
+                                          StrokeLineCap="Round"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Grid>
 
-        <Button Grid.Row="3" Classes="Primary"
-                Content="{Binding PrimaryActionLabel}"
-                Click="Toggle_Click"/>
-    </Grid>
+                        <TextBlock Text="{Binding Title}" FontSize="32" FontWeight="Bold"
+                                   FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding Subtitle}" FontSize="15" FontWeight="Medium"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Border Classes="GlassPanel">
+                        <StackPanel Spacing="14">
+                            <StackPanel Spacing="6" HorizontalAlignment="Center">
+                                <TextBlock Text="{Binding PhaseLabel}" FontSize="22" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimary}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding Status}" FontSize="13"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           TextWrapping="Wrap" TextAlignment="Center"
+                                           MaxWidth="320" HorizontalAlignment="Center"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="10"
+                                        HorizontalAlignment="Center"
+                                        IsVisible="{Binding HasHost}">
+                                <Border Classes="MetricChip">
+                                    <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                        <TextBlock Text="主机" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextMuted}"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{Binding HostName}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   MaxWidth="140" TextTrimming="CharacterEllipsis"
+                                                   HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Classes="MetricChip">
+                                    <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                        <TextBlock Text="时钟" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextMuted}"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{Binding ClockLabel}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource MintBrush}"
+                                                   HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <StackPanel Spacing="4" HorizontalAlignment="Center"
+                                        IsVisible="{Binding HasLocalAddress}">
+                                <TextBlock Text="本机地址" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextMuted}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding LocalAddress}" FontSize="16" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AccentSoftBrush}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="企业网若无法发现，请在 Host 手动连接此地址"
+                                           FontSize="11" Foreground="{DynamicResource TextMuted}"
+                                           TextWrapping="Wrap" TextAlignment="Center" MaxWidth="280"/>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding ErrorMessage}" FontSize="13"
+                                       Foreground="{DynamicResource ErrorBrush}"
+                                       TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"
+                                       IsVisible="{Binding HasError}" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Panel>
 </Window>
