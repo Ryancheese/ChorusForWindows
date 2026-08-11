@@ -49,6 +49,7 @@ public sealed class HostSessionController : IDisposable
     private double _sessionStartHostPlayAt;
     private double _sessionLead = 1.4;
     private bool _sessionIsSystemAudio;
+    private string _sessionTitle = "";
     private CancellationTokenSource? _prepareCts;
     private double _liveSampleRate = SyncProtocol.SampleRate;
     private ulong _liveSequence;
@@ -56,6 +57,8 @@ public sealed class HostSessionController : IDisposable
     private Task? _sendTask;
     private volatile bool _sending;
     private float _maxSample;
+    /// <summary>Smoothed 0–1 peak envelope for UI audio-reactive glass.</summary>
+    private float _audioLevel;
     private Action<ReadOnlyMemory<float>>? _samplesHandler;
     private ulong _liveSampleIndex;
     private volatile bool _paused;
@@ -81,8 +84,22 @@ public sealed class HostSessionController : IDisposable
     public string CurrentSource { get; private set; } = "未播放";
     public bool IsPaused => _paused;
     public bool IsStreamingSystemAudio => _streamingSystemAudio;
+
+    /// <summary>
+    /// Snapshot then decay the 0–1 peak envelope (call once per UI frame).
+    /// </summary>
+    public float TakeAudioLevel(float decay = 0.90f)
+    {
+        var v = Volatile.Read(ref _audioLevel);
+        Volatile.Write(ref _audioLevel, v * decay);
+        return Math.Clamp(v, 0f, 1f);
+    }
     public bool MuteLocalOutput { get => _muteLocal; set => _muteLocal = value; }
     public Playlist Playlist { get; } = new();
+
+    private bool HasActivePlaybackSession =>
+        _currentSessionId.HasValue
+        && (CurrentPhase == Phase.Playing || _streamingSystemAudio || _sending);
 
     public event Action? StateChanged;
 
@@ -144,7 +161,8 @@ public sealed class HostSessionController : IDisposable
         }
 
         StatusText = $"正在连接 {displayName ?? label}…";
-        CurrentPhase = Phase.Connected;
+        if (!HasActivePlaybackSession)
+            CurrentPhase = Phase.Connected;
         LastError = null;
         StateChanged?.Invoke();
 
@@ -184,7 +202,8 @@ public sealed class HostSessionController : IDisposable
             _synchronizers[control] = new ClockSynchronizer();
         }
 
-        CurrentPhase = Phase.Connected;
+        if (!HasActivePlaybackSession)
+            CurrentPhase = Phase.Connected;
         StatusText = $"已连接 {displayName}，握手中…";
         StateChanged?.Invoke();
 
@@ -294,17 +313,13 @@ public sealed class HostSessionController : IDisposable
                 RegisterSpeaker(conn, h.Info);
                 conn.SendControl(new ControlPayload.Welcome(_localDevice));
                 LastError = null;
-                CurrentPhase = Phase.SyncingClock;
-                StatusText = $"已连接 {h.Info.Name}，校准时钟…";
-                StateChanged?.Invoke();
+                AdmitSpeakerAfterHandshake(conn, h.Info.Name);
                 break;
 
             case ControlPayload.Welcome w:
                 RegisterSpeaker(conn, w.Info);
                 LastError = null;
-                CurrentPhase = Phase.SyncingClock;
-                StatusText = $"已连接 {w.Info.Name}，校准时钟…";
-                StateChanged?.Invoke();
+                AdmitSpeakerAfterHandshake(conn, w.Info.Name);
                 break;
 
             case ControlPayload.AudioChannelHello:
@@ -363,6 +378,85 @@ public sealed class HostSessionController : IDisposable
             if (!ConnectedSpeakers.Any(s => s.Id == info.Id))
                 ConnectedSpeakers.Add(info);
         }
+    }
+
+    private void AdmitSpeakerAfterHandshake(SyncConnection conn, string name)
+    {
+        if (HasActivePlaybackSession)
+        {
+            StatusText = $"中途加入：{name}，正在同步…";
+            StateChanged?.Invoke();
+            _ = Task.Run(() => CatchUpLateJoiner(conn, name));
+        }
+        else
+        {
+            CurrentPhase = Phase.SyncingClock;
+            StatusText = $"已连接 {name}，校准时钟…";
+            StateChanged?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Mid-session join: wait for clock, then unicast prepare+start on the original timeline.
+    /// Live PCM already fans out via <see cref="SendLoop"/> to newly paired audio sockets.
+    /// </summary>
+    private async Task CatchUpLateJoiner(SyncConnection conn, string name)
+    {
+        var sessionId = _currentSessionId;
+        if (!sessionId.HasValue || _sessionStartHostPlayAt <= 0) return;
+
+        var hostPlayAt = _sessionStartHostPlayAt;
+        var lead = Math.Max(_sessionLead, 1.4);
+        var title = string.IsNullOrEmpty(_sessionTitle)
+            ? (_sessionIsSystemAudio ? "Windows 系统音频" : "Session")
+            : _sessionTitle;
+        var sampleRate = _liveSampleRate;
+
+        for (int i = 0; i < 25; i++)
+        {
+            if (_disposed || _currentSessionId != sessionId) return;
+            ClockOffsetEstimate? estimate;
+            lock (_lock)
+                estimate = _synchronizers.GetValueOrDefault(conn)?.BestEstimate;
+            if (estimate != null) break;
+            await Task.Delay(100).ConfigureAwait(false);
+        }
+
+        if (_disposed || _currentSessionId != sessionId) return;
+
+        // Ensure dual-TCP audio channel is paired before prepare/start.
+        for (int i = 0; i < 20; i++)
+        {
+            bool paired;
+            lock (_lock) paired = _audioByControl.ContainsKey(conn);
+            if (paired) break;
+            await Task.Delay(50).ConfigureAwait(false);
+        }
+
+        if (_disposed || _currentSessionId != sessionId) return;
+
+        try
+        {
+            conn.SendControl(new ControlPayload.PrepareSession(
+                new PrepareSessionData(sessionId.Value, sampleRate, SyncProtocol.Channels, title)));
+            // Match normal prepare settle so iOS can rebuild AVAudioEngine.
+            await Task.Delay(700).ConfigureAwait(false);
+            if (_disposed || _currentSessionId != sessionId) return;
+
+            conn.SendControl(new ControlPayload.StartPlayback(
+                new StartPlaybackData(sessionId.Value, hostPlayAt, lead)));
+        }
+        catch
+        {
+            return;
+        }
+
+        if (CurrentPhase != Phase.Playing)
+            CurrentPhase = Phase.Playing;
+        StatusText = _sessionIsSystemAudio
+            ? $"同步转播中（已同步 {name}）"
+            : $"播放中：{title}（已同步 {name}）";
+        StateChanged?.Invoke();
     }
 
     private void StartClockPings(SyncConnection conn)
@@ -522,6 +616,7 @@ public sealed class HostSessionController : IDisposable
         const string title = "Windows 系统音频";
         var sessionId = Guid.NewGuid();
         _currentSessionId = sessionId;
+        _sessionTitle = title;
         _streamingSystemAudio = true;
         _sessionIsSystemAudio = true;
         _playLocal = true;
@@ -529,6 +624,7 @@ public sealed class HostSessionController : IDisposable
         _liveSequence = 0;
         _liveSampleIndex = 0;
         _maxSample = 0;
+        Volatile.Write(ref _audioLevel, 0);
         _sendQueue.Clear();
         CurrentSource = title;
 
@@ -605,10 +701,12 @@ public sealed class HostSessionController : IDisposable
         _playLocal = playLocal;
         var sessionId = Guid.NewGuid();
         _currentSessionId = sessionId;
+        _sessionTitle = title;
         _liveSampleRate = SyncProtocol.SampleRate;
         _liveSequence = 0;
         _liveSampleIndex = 0;
         _maxSample = 0;
+        Volatile.Write(ref _audioLevel, 0);
         _sendQueue.Clear();
 
         // Match Mac: prepare first so iOS can rebuild AVAudioEngine before hostPlayAt is frozen.
@@ -705,6 +803,8 @@ public sealed class HostSessionController : IDisposable
             if (a > peak) peak = a;
         }
         if (peak > _maxSample) _maxSample = peak;
+        var env = Math.Max(peak, Volatile.Read(ref _audioLevel) * 0.82f);
+        Volatile.Write(ref _audioLevel, env);
 
         const int chunkSize = 4096;
         var arr = samples.ToArray();
@@ -868,8 +968,11 @@ public sealed class HostSessionController : IDisposable
         try { _capture?.Dispose(); } catch { }
         _capture = null;
         _currentSessionId = null;
+        _sessionTitle = "";
+        _sessionStartHostPlayAt = 0;
         _liveSequence = 0;
         _liveSampleIndex = 0;
+        Volatile.Write(ref _audioLevel, 0);
 
         if (CurrentPhase == Phase.Playing)
         {

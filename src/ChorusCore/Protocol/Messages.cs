@@ -36,9 +36,11 @@ public sealed record DeviceInfo(
     [property: JsonPropertyName("role")] DeviceRole Role,
     [property: JsonPropertyName("protocolVersion")] ushort ProtocolVersion = SyncProtocol.Version,
     /// <summary>Optional platform hint: ios / android / windows / macos.</summary>
-    [property: JsonPropertyName("platform")] string? Platform = null)
+    [property: JsonPropertyName("platform")] string? Platform = null,
+    /// <summary>Optional hardware model, e.g. "iPhone 15 Pro".</summary>
+    [property: JsonPropertyName("model")] string? Model = null)
 {
-    /// <summary>Short label for Host UI (not serialized).</summary>
+    /// <summary>Short platform chip for Host UI (not serialized).</summary>
     [JsonIgnore]
     public string PlatformLabel => Platform?.Trim().ToLowerInvariant() switch
     {
@@ -46,9 +48,34 @@ public sealed record DeviceInfo(
         "ipados" => "iPad",
         "android" => "Android",
         "windows" => "Windows",
-        "macos" or "mac" => "Mac",
+        "macos" or "mac" => "MacBook",
         _ => Role == DeviceRole.Host ? "Host" : "Speaker",
     };
+
+    /// <summary>Name plus model when available (Host session list).</summary>
+    [JsonIgnore]
+    public string DisplayName
+    {
+        get
+        {
+            var name = Name?.Trim() ?? "";
+            var model = Model?.Trim() ?? "";
+            var generic = name.Equals("iPhone", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("iPad", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("iPod", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Android", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Speaker", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("MacBook", StringComparison.OrdinalIgnoreCase);
+            if (generic && model.Length > 0) return model;
+            if (model.Length == 0) return name.Length > 0 ? name : PlatformLabel;
+            if (name.Contains(model, StringComparison.OrdinalIgnoreCase)) return name;
+            return $"{name} · {model}";
+        }
+    }
+
+    /// <summary>Secondary chip under the name — platform family only.</summary>
+    [JsonIgnore]
+    public string DetailLabel => PlatformLabel;
 }
 
 /// <summary>Host -> Speaker clock probe.</summary>

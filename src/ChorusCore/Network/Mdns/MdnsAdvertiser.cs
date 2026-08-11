@@ -169,10 +169,35 @@ public sealed class MdnsAdvertiser : IDisposable
         catch (Exception ex) { ErrorOccurred?.Invoke($"mDNS send failed: {ex.Message}"); }
     }
 
+    /// <summary>RFC 6762 goodbye: announce TTL=0 so browsers drop us immediately.</summary>
+    private void SendGoodbye()
+    {
+        if (_client == null) return;
+        var instanceFull = $"{_instanceName}.{_serviceType}";
+        var answers = new List<DnsResourceRecord>
+        {
+            new() { Name = _serviceType, Type = DnsRecordType.PTR, Class = 1, Ttl = 0,
+                    Rdata = DnsCodec.BuildPtrRdata(instanceFull) },
+            new() { Name = instanceFull, Type = DnsRecordType.SRV, Class = 1, Ttl = 0,
+                    Rdata = DnsCodec.BuildSrvRdata(_hostName, _port) },
+            new() { Name = instanceFull, Type = DnsRecordType.TXT, Class = 1, Ttl = 0,
+                    Rdata = DnsCodec.BuildTxtRdata(new[] { new KeyValuePair<string, string>("host", _instanceName) }) },
+            new() { Name = _hostName, Type = DnsRecordType.A, Class = 1, Ttl = 0,
+                    Rdata = DnsCodec.BuildARdata(_address) },
+        };
+        try
+        {
+            var packet = DnsCodec.BuildResponse(answers, null);
+            _client.Send(packet, packet.Length, new IPEndPoint(MulticastAddress, MulticastPort));
+        }
+        catch { /* best-effort */ }
+    }
+
     public void Dispose()
     {
-        _running = false;
         _announceTimer?.Dispose();
+        try { SendGoodbye(); } catch { }
+        _running = false;
         try { _client?.DropMulticastGroup(MulticastAddress); } catch { }
         try { _client?.Dispose(); } catch { }
         _client = null;

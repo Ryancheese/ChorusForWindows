@@ -28,6 +28,13 @@ public sealed class SpeakerViewModel : INotifyPropertyChanged, IDisposable
     public string? ErrorMessage { get; private set; }
     public bool IsAdvertising { get; private set; }
     public bool IsClockCalibrated { get; private set; }
+    public bool IsPlaying { get; private set; }
+    /// <summary>Orb pulse intensifies while advertising or playing.</summary>
+    public bool IsLive => IsAdvertising || IsPlaying;
+
+    /// <summary>Peek+decay audio envelope for reactive glass (once per UI frame).</summary>
+    public float TakeAudioLevel() => _session.TakeAudioLevel();
+
     public bool HasHost => !string.IsNullOrEmpty(HostName);
     public bool HasLocalAddress => !string.IsNullOrEmpty(LocalAddress);
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
@@ -37,9 +44,15 @@ public sealed class SpeakerViewModel : INotifyPropertyChanged, IDisposable
     public void ToggleBroadcast()
     {
         if (IsAdvertising)
+        {
             _session.StopAdvertising();
-        else
-            _session.StartAdvertising();
+            return;
+        }
+
+        // Error / retry path: always tear down before rebinding 17482.
+        if (PhaseLabel == "错误")
+            _session.StopAdvertising();
+        _session.StartAdvertising();
     }
 
     private void OnSessionChanged()
@@ -55,6 +68,7 @@ public sealed class SpeakerViewModel : INotifyPropertyChanged, IDisposable
         ErrorMessage = _session.ErrorMessage;
         IsAdvertising = _session.IsAdvertising;
         IsClockCalibrated = _session.IsClockCalibrated;
+        IsPlaying = _session.Phase == SpeakerPhase.Playing;
         PhaseLabel = _session.Phase switch
         {
             SpeakerPhase.Idle => "空闲",
@@ -72,6 +86,8 @@ public sealed class SpeakerViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(ErrorMessage));
         OnPropertyChanged(nameof(IsAdvertising));
         OnPropertyChanged(nameof(IsClockCalibrated));
+        OnPropertyChanged(nameof(IsPlaying));
+        OnPropertyChanged(nameof(IsLive));
         OnPropertyChanged(nameof(HasHost));
         OnPropertyChanged(nameof(HasLocalAddress));
         OnPropertyChanged(nameof(HasError));

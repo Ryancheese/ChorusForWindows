@@ -34,8 +34,13 @@ public sealed class SpeakerSession : IDisposable
     private Guid? _sessionId;
     private double _sessionSampleRate = SyncProtocol.SampleRate;
     private double _hostPlayAt;
+    /// <summary>Host sent startPlayback; safe to open the render engine on the first ready chunk.</summary>
+    private volatile bool _playArmed;
     private volatile bool _playStarted;
     private volatile bool _disposed;
+    /// <summary>Chunks released by jitter before the player was armed (late-join / prepare race).</summary>
+    private readonly Queue<AudioJitterBuffer.Chunk> _heldChunks = new();
+    private readonly object _playbackLock = new();
 
     private MdnsAdvertiser? _advertiser;
     private HostListener? _listener;
@@ -53,6 +58,7 @@ public sealed class SpeakerSession : IDisposable
     private long _bytesReceived;
     private long _bytesEnqueued;
     private float _peakSample;
+    private float _audioLevel;
 
     public SpeakerPhase Phase { get; private set; } = SpeakerPhase.Idle;
     public string Status { get; private set; } = "未广播";
@@ -65,13 +71,22 @@ public sealed class SpeakerSession : IDisposable
     public string? ErrorMessage { get; private set; }
     public event Action? StateChanged;
 
+    /// <summary>Snapshot then decay the 0–1 peak envelope (once per UI frame).</summary>
+    public float TakeAudioLevel(float decay = 0.90f)
+    {
+        var v = Volatile.Read(ref _audioLevel);
+        Volatile.Write(ref _audioLevel, v * decay);
+        return Math.Clamp(v, 0f, 1f);
+    }
+
     public SpeakerSession()
     {
         _localDevice = new DeviceInfo(
             Guid.NewGuid().ToString(),
-            Environment.MachineName + "-Speaker",
+            Environment.MachineName,
             DeviceRole.Speaker,
-            Platform: "windows");
+            Platform: "windows",
+            Model: Environment.OSVersion.VersionString);
     }
 
     public void StartAdvertising(ushort port = SyncBonjour.ControlPort)
@@ -84,31 +99,50 @@ public sealed class SpeakerSession : IDisposable
         _reconnectAttempts = 0;
         ErrorMessage = null;
 
-        try
+        Exception? lastError = null;
+        for (int attempt = 0; attempt < 6; attempt++)
         {
-            _listener = new HostListener();
-            _listener.ConnectionAccepted += OnInboundConnection;
-            _listener.Start(port);
+            try
+            {
+                // Previous TcpListener can take a beat to fully release on Windows.
+                if (attempt > 0)
+                    Thread.Sleep(150 * attempt);
+
+                var listener = new HostListener();
+                listener.ConnectionAccepted += OnInboundConnection;
+                listener.Start(port);
+                _listener = listener;
+                lastError = null;
+                break;
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+            {
+                lastError = ex;
+                try { _listener?.Dispose(); } catch { }
+                _listener = null;
+                Log($"端口 {port} 暂不可用，重试 {attempt + 1}/6…");
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                try { _listener?.Dispose(); } catch { }
+                _listener = null;
+                break;
+            }
         }
-        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+
+        if (_listener == null)
         {
-            _listener = null;
             _isAdvertisingMode = false;
             Phase = SpeakerPhase.Error;
-            ErrorMessage = $"端口 {port} 已被占用。请先关闭本机 Chorus Host / 其他 Speaker，再重试。";
-            Status = ErrorMessage;
-            Log(Status);
-            StateChanged?.Invoke();
-            return;
-        }
-        catch (Exception ex)
-        {
-            _listener = null;
-            _isAdvertisingMode = false;
-            Phase = SpeakerPhase.Error;
-            ErrorMessage = $"无法开始广播：{ex.Message}";
-            Status = ErrorMessage;
-            Log(Status);
+            ErrorMessage = lastError is SocketException
+                {
+                    SocketErrorCode: SocketError.AddressAlreadyInUse
+                }
+                ? $"端口 {port} 仍被占用。请完全退出本机其他 Chorus 窗口后重试（含后台 Host）。"
+                : $"无法开始广播：{lastError?.Message ?? "未知错误"}";
+            Status = "无法开始广播";
+            Log(ErrorMessage);
             StateChanged?.Invoke();
             return;
         }
@@ -355,9 +389,15 @@ public sealed class SpeakerSession : IDisposable
                 break;
 
             case ControlPayload.PrepareSession ps:
-                _sessionId = ps.Session.SessionId;
-                _sessionSampleRate = ps.Session.SampleRate;
-                _jitter = new AudioJitterBuffer(_sessionSampleRate);
+                lock (_playbackLock)
+                {
+                    TearDownPlayer();
+                    _heldChunks.Clear();
+                    _playArmed = false;
+                    _sessionId = ps.Session.SessionId;
+                    _sessionSampleRate = ps.Session.SampleRate;
+                    _jitter = new AudioJitterBuffer(_sessionSampleRate);
+                }
                 Phase = SpeakerPhase.Ready;
                 Status = $"准备会话：{ps.Session.Title}";
                 Log(Status);
@@ -367,10 +407,15 @@ public sealed class SpeakerSession : IDisposable
             case ControlPayload.StartPlayback sp:
                 _hostPlayAt = sp.Start.HostPlayAt;
                 Log($"StartPlayback hostPlayAt={_hostPlayAt:F2} offset={_clockOffset:F3}");
-                StartPlaying();
-                Phase = SpeakerPhase.Playing;
-                Status = "播放中";
-                Log(Status);
+                // Do NOT StartAt(session origin) here — mid-session join must align to the
+                // first ready chunk's hostPlayAt (same model as iOS/Android).
+                lock (_playbackLock)
+                {
+                    _playArmed = true;
+                    FlushHeldChunksLocked();
+                }
+                Phase = SpeakerPhase.Ready;
+                Status = "即将同步起播…";
                 StateChanged?.Invoke();
                 break;
 
@@ -411,10 +456,29 @@ public sealed class SpeakerSession : IDisposable
             if (a > peak) peak = a;
         }
         if (peak > _peakSample) _peakSample = peak;
+        var env = Math.Max(peak, Volatile.Read(ref _audioLevel) * 0.82f);
+        Volatile.Write(ref _audioLevel, env);
 
-        var ready = _jitter.Append(header, pcm);
-        foreach (var chunk in ready)
-            EnqueueForPlayback(chunk.Pcm);
+        bool becamePlaying = false;
+        lock (_playbackLock)
+        {
+            var ready = _jitter.Append(header, pcm);
+            if (!_playArmed)
+            {
+                foreach (var chunk in ready)
+                    _heldChunks.Enqueue(chunk);
+                return;
+            }
+
+            foreach (var chunk in ready)
+            {
+                if (ConsumeChunkLocked(chunk))
+                    becamePlaying = true;
+            }
+        }
+
+        if (becamePlaying)
+            StateChanged?.Invoke();
 
         if (_framesReceived % 500 == 1)
         {
@@ -422,37 +486,79 @@ public sealed class SpeakerSession : IDisposable
         }
     }
 
-    private void StartPlaying()
+    private void FlushHeldChunksLocked()
     {
-        StopPlaying();
+        bool becamePlaying = false;
+        while (_heldChunks.Count > 0)
+        {
+            if (ConsumeChunkLocked(_heldChunks.Dequeue()))
+                becamePlaying = true;
+        }
+        if (becamePlaying)
+            StateChanged?.Invoke();
+    }
+
+    /// <returns>True when phase first transitions to Playing.</returns>
+    private bool ConsumeChunkLocked(AudioJitterBuffer.Chunk chunk)
+    {
+        if (!_playStarted)
+        {
+            double localPlayAt = chunk.Header.HostPlayAt + _clockOffset;
+            // Drop stale pre-roll so we start on a chunk that still has schedule runway
+            // (dumping already-due PCM makes Windows race ahead / lag vs iPhones).
+            if (localPlayAt < HostTime.Now() + 0.05)
+                return false;
+            BeginPlaybackLocked(chunk.Header.HostPlayAt);
+        }
+
+        if (!_playStarted || _player == null) return false;
+
+        Interlocked.Add(ref _bytesEnqueued, chunk.Pcm.Length);
+        var samples = new float[chunk.Pcm.Length / 4];
+        Buffer.BlockCopy(chunk.Pcm, 0, samples, 0, chunk.Pcm.Length);
+        _player.Enqueue(samples);
+
+        if (Phase == SpeakerPhase.Playing) return false;
+        Phase = SpeakerPhase.Playing;
+        Status = "播放中";
+        return true;
+    }
+
+    /// <summary>
+    /// Open the render engine aligned to the first audible chunk — not the original
+    /// session hostPlayAt (which is already in the past for late joiners).
+    /// </summary>
+    private void BeginPlaybackLocked(double chunkHostPlayAt)
+    {
+        TearDownPlayer();
         _player = new LocalAudioPlayer(_sessionSampleRate, 1);
-        // Align engine start to shared timeline with output latency compensation
-        // (same approach as Host local play), instead of Sleep-gated enqueue.
-        double localPlayAt = _hostPlayAt + _clockOffset;
+        double localPlayAt = chunkHostPlayAt + _clockOffset;
         _player.StartAt(localPlayAt);
         _playStarted = true;
-        Log($"起播 StartAt localPlayAt={localPlayAt:F3} compensation={_player.OutputCompensationSeconds:F3}s");
+        Log($"起播 StartAt localPlayAt={localPlayAt:F3} chunkHostPlayAt={chunkHostPlayAt:F3} compensation={_player.OutputCompensationSeconds:F3}s");
     }
 
-    private void EnqueueForPlayback(byte[] pcm)
-    {
-        if (!_playStarted || _player == null) return;
-        Interlocked.Add(ref _bytesEnqueued, pcm.Length);
-        var samples = new float[pcm.Length / 4];
-        Buffer.BlockCopy(pcm, 0, samples, 0, pcm.Length);
-        _player.Enqueue(samples);
-    }
-
-    private void StopPlaying()
+    private void TearDownPlayer()
     {
         _playStarted = false;
         try { _player?.Stop(); } catch { }
         _player = null;
-        _jitter?.Reset();
-        _framesReceived = 0;
-        _bytesReceived = 0;
-        _bytesEnqueued = 0;
-        _peakSample = 0;
+    }
+
+    private void StopPlaying()
+    {
+        lock (_playbackLock)
+        {
+            _playArmed = false;
+            _heldChunks.Clear();
+            TearDownPlayer();
+            _jitter?.Reset();
+            _framesReceived = 0;
+            _bytesReceived = 0;
+            _bytesEnqueued = 0;
+            _peakSample = 0;
+            Volatile.Write(ref _audioLevel, 0);
+        }
     }
 
     private void TryReconnect()
